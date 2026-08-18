@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:demo}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.orm.jdbc.bind: debug
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  payment:
+    provider: fake
+  shipping:
+    provider: fake
+
+jwt:
+  # default só para dev local — nunca usar este valor em produção
+  secret: ${JWT_SECRET:dev-secret-nao-usar-em-producao-troque-isso}
+  expiration: ${JWT_EXPIRATION:86400000}
