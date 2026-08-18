@@ -1,0 +1,26 @@
+package com.TadeuArtesanatos.demo.customer.dto;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+public record CustomerUpdateRequestDto(
+
+        @NotBlank
+        @Size(max = 100)
+        String firstName,
+
+        @NotBlank
+        @Size(max = 100)
+        String lastName,
+
+        @NotBlank
+        @Email
+        String email,
+
+        @NotBlank
+        @Pattern(regexp = "^\\(?\\d{2}\\)?[\\s-]?9?\\d{4}-?\\d{4}$", message = "Telefone inválido")
+        String phone
+) {
+}
