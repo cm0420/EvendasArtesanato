@@ -17,16 +17,23 @@ Este arquivo resume as decisões de arquitetura definidas em sessão de planejam
 
 **Revisão em relação à primeira versão desta seção:** os domínios ficam mais granulares — em vez de agrupar peça, conjunto e estoque num único pacote genérico (`catalog`), cada conceito com responsabilidade própria vira seu próprio módulo. Cada domínio segue o mesmo padrão interno de camadas usado em outros projetos do Miguel (incluindo `mapper`, que não estava listado explicitamente antes).
 
+**Revisão 2 — separação de `user` e `security`:** originalmente o módulo `security` acumulava tanto a entidade de usuário (dado de domínio) quanto o mecanismo de autenticação/autorização (JWT, filtros, config). Foi decidido separar em dois módulos, aplicando o mesmo princípio de responsabilidade única já usado entre `catalog` e `stock`:
+- `user` — dado de domínio: quem é o usuário (entidade `User`, `Role`, CRUD básico).
+- `security` — mecanismo: como autenticar e autorizar (filtro JWT, `SecurityConfig`, `UserDetailsServiceImpl`, endpoints de login).
+- Dependência é unidirecional: `security` depende de `user` (usa `User`/`UserRepository` pra autenticar), nunca o contrário.
+- Isso evita que outros módulos que só precisam da entidade `User` (como `customer`, via `@OneToOne` físico) tenham que importar toda a infraestrutura de segurança (filtros, config JWT) junto.
+
 ### Módulos (pacotes por domínio)
 
-- `customer` — cliente, endereço
+- `user` — usuário do sistema (entidade `User`, enum `Role`), CRUD básico. Base para os demais módulos que precisam referenciar um usuário (ex: `customer`)
+- `security` — autenticação e autorização (filtro JWT, `SecurityConfig`, `UserDetailsServiceImpl`, login). Depende de `user`, nunca o contrário
+- `customer` — cliente, endereço. Referencia `User` (módulo `user`) via `@OneToOne` físico — decisão fechada priorizando integridade referencial garantida pelo banco sobre desacoplamento entre módulos
 - `catalog` — peça, conjunto/kit, categoria
 - `stock` — controle e reserva de estoque (estoque disponível, reserva com expiração). Referencia a entidade `Peça` de `catalog` (import cruzado, esperado), mas a responsabilidade de lock pessimista e liberação de reserva fica isolada aqui, separada do CRUD de peça — mantendo o `StockService` com responsabilidade única, como já definido na seção de SOLID
 - `order` — pedido, item de pedido, máquina de estados. **Não existe módulo separado para carrinho**: `CARRINHO` é o primeiro estado do próprio pedido na máquina de estados já definida na seção de concorrência (`CARRINHO → AGUARDANDO_PAGAMENTO → PAGO → ENVIADO → ENTREGUE`) — assumido assim para não duplicar conceito; avisar se a intenção era ter carrinho como entidade/módulo à parte
 - `payment` — interface `PaymentGateway`, implementação fake para dev, DTOs
 - `shipping` — interface `ShippingProvider`, implementação fake para dev
 - `admin` — endpoints e regras específicas de backoffice (combina dados de vários domínios; não tem entidade própria)
-- `security` — autenticação, autorização, JWT
 - `common` / `shared` — exceções globais, configs, utilitários
 
 Cada pacote de domínio segue internamente: `entity / mapper / repository / service / controller / dto`.
@@ -34,7 +41,18 @@ Cada pacote de domínio segue internamente: `entity / mapper / repository / serv
 Exemplo de estrutura resultante:
 
 ```
-com.suaempresa.loja
+com.TadeuArtesanatos.demo
+├── user/
+│   ├── entity        (User, Role)
+│   ├── repository
+│   ├── service
+│   ├── controller
+│   └── dto
+├── security/
+│   ├── config         (SecurityConfig)
+│   ├── filter          (filtro JWT)
+│   ├── service          (UserDetailsServiceImpl, JwtService)
+│   └── dto             (login request/response)
 ├── customer/
 │   ├── entity
 │   ├── mapper
@@ -54,8 +72,6 @@ com.suaempresa.loja
 │   └── (interface, fake impl, dto — sem entity/repository próprios ainda)
 ├── admin/
 │   └── (controller, service — sem entity própria)
-├── security/
-│   └── (config, filtro JWT, dto)
 └── common / shared/
     └── (exceções globais, configs, utils)
 ```
@@ -146,6 +162,15 @@ Fora de escopo por enquanto: SDKs de gateway de pagamento/frete, Spring Cloud, m
 ## Progresso
 
 _(mais recente primeiro — novo marco vai no topo, sem apagar os anteriores)_
+
+### Marco 4 — repositório git, módulo `customer`, módulo `security` e ajustes finais
+- Repositório git criado em `demo/` (raiz correta), branch `main` com commit inicial cobrindo o estado até o Marco 3. Branches `feature/customer` e `feature/security` criadas a partir da `main` pra cada módulo novo.
+- Módulo `customer` implementado por completo seguindo `modulo-customer-codigo.md`: entities `Customer`/`Address`, `CustomerRepository`/`AddressRepository`, DTOs (`CustomerRequestDto`, `CustomerUpdateRequestDto` sem CPF — imutável, `CustomerResponseDto`, `AddressRequestDto`, `AddressResponseDto`), `CustomerMapper`, `CustomerService`, `CustomerController` (rotas `/me/**` sem anotação de segurança + `GET /{id}` admin), migrations `V2`/`V3`. Rascunho antigo `costumer/entity/Costumer.java` (grafia errada, comentado) removido pelo Miguel — grafia definitiva confirmada: `customer`.
+- Módulo `security` implementado por completo seguindo `modulo-security-codigo.md`: dependências JJWT no `pom.xml`, entity `RefreshToken`, `RefreshTokenRepository`, DTOs (`SignupRequestDto`, `LoginRequestDto`, `TokenResponseDto`), `JwtService`, `RefreshTokenService` (com `generateRawToken()` implementado — faltava no gabarito original), `UserDetailsServiceImpl`, `JwtAuthenticationFilter`, `SecurityConfig` definitivo (substituindo o mínimo criado antes só pro bean `PasswordEncoder`, que foi removido), `AuthService`, `AuthController`, migration `V4`. Ajustado `app.cookie.secure` por profile (`false` em dev, default `true` nos demais) via `@Value` no `AuthController`.
+- Correções do Miguel em cima do gabarito de `security`, já refletidas nos `.md` de referência: `SecurityConfig.authenticationProvider` usando `new DaoAuthenticationProvider(userDetailsService)` (construtor) em vez do `new DaoAuthenticationProvider()` + setter deprecated do gabarito original (que também tinha um typo de digitação); rota `/swagger-ui.html` adicionada ao `permitAll()`.
+- Tentativa de implementar os testes de `modulo-security-testes.md` (unitários + integração) esbarrou em vários problemas de ambiente: build local só compila com `JAVA_HOME` apontando pro JDK 21 Temurin (o JDK 25 default da máquina falha no `maven-compiler-plugin` com `--release 21`); `TestcontainersConfiguration` é package-private, bloqueando uso fora do pacote raiz; `@AutoConfigureMockMvc` mudou de pacote no Spring Boot 4.1 (`org.springframework.boot.webmvc.test.autoconfigure`, não mais `org.springframework.boot.test.autoconfigure.web.servlet` como no gabarito). **A pedido do Miguel, toda essa tentativa foi revertida por completo** — os 4 arquivos de teste, as dependências do Mockito no `pom.xml` e o `public` do `TestcontainersConfiguration` foram removidos. Os testes do módulo `security` continuam pendentes de implementação.
+- Ajustes do Miguel nesta sessão, já refletidos nos `.md` de referência correspondentes: `GlobalExceptionHandler` ganhou `@ExceptionHandler(AuthenticationException.class)` retornando 401 "Credenciais inválidas" (cobre login com senha errada); `CustomerController` teve `produces`/`consumes` movidos do `@RequestMapping` de classe pra cada endpoint individualmente (só onde faz sentido — `DELETE` sem corpo não declara nada); `application-dev.yml` ganhou `org.springframework.security: debug` no logging.
+- Pendências abertas: rodar as migrations `V2`–`V4` contra um Postgres de verdade (só foram criadas, não validadas em banco real ainda); ajustar `allowedOrigins` do CORS quando o front existir; testes do módulo `security` (unitários e integração) ainda não escritos; endpoint de signup unificado já existe (`AuthService.signup`), mas não foi testado ponta a ponta.
 
 ### Marco 3 — módulo `user` completo (dto, mapper, service, controller, migration)
 - DTOs finalizados em `user/dto`: criados `UserRoleUpdateDto`, `UserPasswordUpdateDto`, `UserResponseDto` (nomenclatura `Dto`, não `DTO` como no gabarito de `modulo-user-codigo.md`, seguindo o padrão já usado nos DTOs existentes). `UserRequestDto` e `UserUpdateRequestDto` já existiam de sessão anterior.

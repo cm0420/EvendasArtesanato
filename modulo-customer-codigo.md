@@ -613,11 +613,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping(
-        value = "/api/customers",
-        produces = MediaType.APPLICATION_JSON_VALUE,
-        consumes = MediaType.APPLICATION_JSON_VALUE
-)
+@RequestMapping("/api/customers")
 @RequiredArgsConstructor
 public class CustomerController {
 
@@ -625,7 +621,7 @@ public class CustomerController {
 
     // ---- Rotas /me — o próprio cliente autenticado, sem comparação de id ----
 
-    @PostMapping("/me")
+    @PostMapping(value = "/me", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CustomerResponseDTO> createOwnProfile(
             @AuthenticationPrincipal User authenticatedUser,
             @Valid @RequestBody CustomerRequestDTO dto
@@ -634,14 +630,14 @@ public class CustomerController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @GetMapping("/me")
+    @GetMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CustomerResponseDTO> findOwnProfile(
             @AuthenticationPrincipal User authenticatedUser
     ) {
         return ResponseEntity.ok(customerService.findOwnProfile(authenticatedUser));
     }
 
-    @PutMapping("/me")
+    @PutMapping(value = "/me", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CustomerResponseDTO> updateOwnProfile(
             @AuthenticationPrincipal User authenticatedUser,
             @Valid @RequestBody CustomerUpdateRequestDTO dto
@@ -657,7 +653,7 @@ public class CustomerController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/me/addresses")
+    @PostMapping(value = "/me/addresses", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AddressResponseDTO> addOwnAddress(
             @AuthenticationPrincipal User authenticatedUser,
             @Valid @RequestBody AddressRequestDTO dto
@@ -666,7 +662,7 @@ public class CustomerController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @GetMapping("/me/addresses")
+    @GetMapping(value = "/me/addresses", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<AddressResponseDTO>> listOwnAddresses(
             @AuthenticationPrincipal User authenticatedUser
     ) {
@@ -684,12 +680,14 @@ public class CustomerController {
 
     // ---- Rota admin — qualquer cliente pelo id, regra fixa, vai no SecurityConfig ----
 
-    @GetMapping("/{id}")
+    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CustomerResponseDTO> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(customerService.findById(id));
     }
 }
 ```
+
+**Atualizado pelo Miguel:** `produces`/`consumes` saíram do `@RequestMapping` de classe e foram pra cada endpoint individualmente — só onde faz sentido (`GET`/`DELETE` sem corpo não declaram `consumes`; `DELETE` sem corpo de resposta não declara nada). Mais preciso que o blanket declarado a nível de classe, que aplicava `consumes`/`produces` até em métodos sem corpo.
 
 **Regras que devem entrar no `SecurityConfig` (módulo `security`, ainda não implementado):**
 

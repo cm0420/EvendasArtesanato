@@ -12,6 +12,7 @@ logging:
   level:
     org.hibernate.SQL: debug
     org.hibernate.orm.jdbc.bind: debug
+    org.springframework.security: debug
 
 springdoc:
   api-docs:
@@ -24,8 +25,12 @@ app:
     provider: fake
   shipping:
     provider: fake
+  cookie:
+    secure: false
 
 jwt:
   # default só para dev local — nunca usar este valor em produção
   secret: ${JWT_SECRET:dev-secret-nao-usar-em-producao-troque-isso}
   expiration: ${JWT_EXPIRATION:86400000}
+
+
