@@ -75,6 +75,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/customers/me/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/customers/*").hasRole("ADMIN")
 
+                        // catalog — navegação pública, CRUD só ADMIN (ver módulo catalog)
+                        .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/catalog/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/catalog/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/catalog/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider(passwordEncoder()))

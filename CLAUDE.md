@@ -163,6 +163,20 @@ Fora de escopo por enquanto: SDKs de gateway de pagamento/frete, Spring Cloud, m
 
 _(mais recente primeiro — novo marco vai no topo, sem apagar os anteriores)_
 
+### Marco 5 — módulo `catalog` completo, implementado e testado ponta a ponta
+- Entities criadas seguindo `modulo-catalog-codigo.md`: `Category` (sem soft delete — sem valor histórico), `Piece` (Peça, com `stock` bruto como fonte de verdade, soft delete via `deletedAt`, fotos em `piece_images` via `@ElementCollection` normalizada, categorias N:N via `piece_categories`), `PieceSet` (Conjunto/Kit, preço fixo definido pelo admin, peças N:N via `set_pieces`, estoque **nunca persistido** — `calculateAvailableStock()` calcula o mínimo entre as peças componentes em tempo real, tratando peça inativa como estoque zero).
+- **Decisão nova**: campo de estoque bruto (`stock`) vive na entidade `Piece` (módulo `catalog`), não em `stock` — o módulo `stock` (próximo) vai construir a lógica de *reserva com expiração e lock pessimista* em cima dessa mesma coluna via import cruzado, sem duplicar o dado. Já refletida na seção de módulos.
+- Repositories, DTOs (`CategoryRequestDto`/`ResponseDto`, `PieceRequestDto`/`ResponseDto`, `PieceSetRequestDto`/`ResponseDto`), mappers MapStruct (com `expression = "java(...)"` para `inStock`/`availableStock`, que são regra de negócio da entidade, não campo simples) e services criados seguindo o gabarito.
+- Controllers com rotas de navegação pública (`GET`) e CRUD restrito a `ADMIN` (`POST`/`PUT`/`DELETE`), regras centralizadas no `SecurityConfig` (nenhum `@PreAuthorize` nos controllers do `catalog` — todas as regras são fixas por método HTTP).
+- Migrations `V5`–`V10` criadas e validadas contra Postgres real: `categories`, `pieces`, `piece_images`, `piece_categories`, `piece_sets`, `set_pieces`.
+- Bugs encontrados e corrigidos durante a implementação, já refletidos no `.md` de referência:
+    - Import `java.util.List` faltando em `PieceService.java` (usado em `dto.imageUrls() != null ? dto.imageUrls() : List.of()`).
+    - `resolvePieces()` em `PieceSetService` não validava se as peças informadas estavam ativas — aceitava vincular peça soft-deleted a um conjunto novo. Corrigido: lança `IllegalArgumentException` se alguma peça estiver inativa.
+    - `ExpiredJwtException` (token JWT vencido) não tinha handler no `GlobalExceptionHandler`, virando `500 Internal Server Error` em vez de `401`. Adicionado `@ExceptionHandler(ExpiredJwtException.class)` retornando 401 "Token expirado, faça login novamente".
+- **Testado ponta a ponta via Postman, sequência completa validada**: criar categoria (201) → criar peça com categoria vinculada (201) → listar peças sem login, rota pública (200) → criar peça sem ser ADMIN, bloqueado (403) → criar segunda peça (201) → criar conjunto com as duas peças, `availableStock` = mínimo entre elas (201, valor correto) → soft delete de uma peça componente → conjunto reconsultado com `availableStock: 0` (regra de estoque dinâmico funcionando) → consulta direta da peça deletada retorna 404 "Peça não encontrada" (soft delete escondendo corretamente de consultas normais, mantendo o registro físico intacto no banco).
+- `createdAt` vindo `null` na resposta do `POST` (mas correto no `GET` subsequente) é comportamento esperado do `@CreationTimestamp` — o objeto retornado na resposta de criação é montado antes do Hibernate popular o campo gerado; não é bug.
+- Pendências abertas: numeração de migrations futuras precisa continuar a partir de `V10`; nenhuma peça/conjunto testada com múltiplas categorias simultâneas ainda; testes automatizados (unitário/integração) do `catalog` ainda não escritos, mesma situação pendente do módulo `security`.
+
 ### Marco 4 — repositório git, módulo `customer`, módulo `security` e ajustes finais
 - Repositório git criado em `demo/` (raiz correta), branch `main` com commit inicial cobrindo o estado até o Marco 3. Branches `feature/customer` e `feature/security` criadas a partir da `main` pra cada módulo novo.
 - Módulo `customer` implementado por completo seguindo `modulo-customer-codigo.md`: entities `Customer`/`Address`, `CustomerRepository`/`AddressRepository`, DTOs (`CustomerRequestDto`, `CustomerUpdateRequestDto` sem CPF — imutável, `CustomerResponseDto`, `AddressRequestDto`, `AddressResponseDto`), `CustomerMapper`, `CustomerService`, `CustomerController` (rotas `/me/**` sem anotação de segurança + `GET /{id}` admin), migrations `V2`/`V3`. Rascunho antigo `costumer/entity/Costumer.java` (grafia errada, comentado) removido pelo Miguel — grafia definitiva confirmada: `customer`.
@@ -208,5 +222,6 @@ _(mais recente primeiro — novo marco vai no topo, sem apagar os anteriores)_
 
 - Hospedagem definitiva (VPS, Railway, Render, Oracle Cloud Free Tier etc.).
 - Notificação de pedido novo para o artesão (email/WhatsApp vs. só painel admin).
-- Modelo de entidades detalhado (Peça, Conjunto, Pedido, Reserva de estoque) — ainda não desenhado.
+- Modelo de entidades detalhado do módulo `stock` (reserva com expiração, lock pessimista) — próxima etapa.
+- Modelo de entidades detalhado de `Pedido` (`order`) — ainda não desenhado.
 - `application.yml` conceitual por profile (dev, docker-local, prod) — ainda não desenhado.
