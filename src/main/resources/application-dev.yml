@@ -33,4 +33,9 @@ jwt:
   secret: ${JWT_SECRET:dev-secret-nao-usar-em-producao-troque-isso}
   expiration: ${JWT_EXPIRATION:86400000}
 
+server:
+  error:
+    include-stacktrace: always
+    include-message: always
+
 

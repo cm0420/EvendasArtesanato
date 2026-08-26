@@ -27,3 +27,8 @@ app:
 jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
