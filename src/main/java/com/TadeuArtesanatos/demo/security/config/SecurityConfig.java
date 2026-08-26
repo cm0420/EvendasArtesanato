@@ -81,6 +81,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/catalog/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/catalog/**").hasRole("ADMIN")
 
+                        // stock — endpoints de teste manual, ADMIN só por enquanto (fluxo real vem com order)
+                        .requestMatchers("/api/stock/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider(passwordEncoder()))

@@ -27,6 +27,8 @@ app:
     provider: fake
   cookie:
     secure: false
+  stock:
+    reservation-expiration-minutes: 2  # curto em dev, só pra testar o job sem esperar muito
 
 jwt:
   # default só para dev local — nunca usar este valor em produção
