@@ -7,8 +7,10 @@ import com.TadeuArtesanatos.demo.common.exception.ResourceNotFoundException;
 import com.TadeuArtesanatos.demo.stock.dto.ReserveStockRequestDto;
 import com.TadeuArtesanatos.demo.stock.dto.StockReservationResponseDto;
 import com.TadeuArtesanatos.demo.stock.entity.ReservationStatus;
+import com.TadeuArtesanatos.demo.stock.entity.StockAdjustment;
 import com.TadeuArtesanatos.demo.stock.entity.StockReservation;
 import com.TadeuArtesanatos.demo.stock.mapper.StockReservationMapper;
+import com.TadeuArtesanatos.demo.stock.repository.StockAdjustmentRepository;
 import com.TadeuArtesanatos.demo.stock.repository.StockReservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +28,7 @@ public class StockService {
     private final StockReservationRepository reservationRepository;
     private final PieceRepository pieceRepository;
     private final StockReservationMapper reservationMapper;
+    private final StockAdjustmentRepository stockAdjustmentRepository;
 
     @Value("${app.stock.reservation-expiration-minutes:20}")
     private long reservationExpirationMinutes;
@@ -102,6 +105,32 @@ public class StockService {
             returnStockWithLock(reservation);
             reservation.expire();
         }
+    }
+
+    /**
+     * Ajusta o estoque manualmente (ex: venda fora do site, perda, avaria), com lock
+     * pessimista, gravando trilha de auditoria (quem, quanto, por quê).
+     */
+    @Transactional
+    public StockAdjustment adjustStock(UUID pieceId, Integer delta, String reason, String adjustedByEmail) {
+        Piece piece = pieceRepository.findByIdForUpdate(pieceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Peça não encontrada"));
+
+        int novoEstoque = piece.getStock() + delta;
+        if (novoEstoque < 0) {
+            throw new InvalidStateException("Ajuste deixaria o estoque negativo (atual: " + piece.getStock() + ", delta: " + delta + ")");
+        }
+
+        piece.setStock(novoEstoque);
+
+        StockAdjustment adjustment = StockAdjustment.builder()
+                .piece(piece)
+                .delta(delta)
+                .reason(reason)
+                .adjustedByEmail(adjustedByEmail)
+                .build();
+
+        return stockAdjustmentRepository.save(adjustment);
     }
 
     // ---- helpers internos ----

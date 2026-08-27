@@ -99,6 +99,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/payments/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole("ADMIN")
 
+                        // admin — tudo ADMIN, sem exceção
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider(passwordEncoder()))

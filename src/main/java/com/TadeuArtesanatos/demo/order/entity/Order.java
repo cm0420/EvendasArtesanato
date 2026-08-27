@@ -90,6 +90,9 @@ public class Order {
     @Column(name = "estimated_delivery_days")
     private Integer estimatedDeliveryDays;
 
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
+
     // ---- Estorno (fluxo/auditoria — sem devolução financeira real ainda) ----
 
     @Column(name = "refund_reason")
@@ -157,6 +160,7 @@ public class Order {
 
     public void markAsPaid() {
         this.status = OrderStatus.PAGO;
+        this.paidAt = LocalDateTime.now();
     }
 
     public void ship(String trackingCode) {
