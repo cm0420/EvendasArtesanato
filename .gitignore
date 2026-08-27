@@ -35,3 +35,7 @@ build/
 ### Environment ###
 .env
 .env.local
+
+### Documentação de planejamento/referência (não faz parte do código) ###
+CLAUDE.md
+modulo-*.md
