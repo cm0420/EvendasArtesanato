@@ -48,6 +48,10 @@ public class PaymentService {
             throw new InvalidStateException("Pedido não está aguardando pagamento (status atual: " + order.getStatus() + ")");
         }
 
+        if (!order.hasShippingSelected()) {
+            throw new InvalidStateException("Selecione o frete antes de pagar");
+        }
+
         PaymentInitiator.PaymentChargeResult chargeResult = paymentInitiator.charge(order, simulateOutcome);
 
         Payment payment = Payment.builder()

@@ -76,6 +76,20 @@ public class Order {
     @Column(name = "checkout_started_at")
     private LocalDateTime checkoutStartedAt;
 
+    // ---- Frete, selecionado depois do checkout ----
+
+    @Column(name = "shipping_cost", precision = 10, scale = 2)
+    private BigDecimal shippingCost;
+
+    @Column(name = "shipping_option_code")
+    private String shippingOptionCode;
+
+    @Column(name = "shipping_option_name")
+    private String shippingOptionName;
+
+    @Column(name = "estimated_delivery_days")
+    private Integer estimatedDeliveryDays;
+
     // ---- Estorno (fluxo/auditoria — sem devolução financeira real ainda) ----
 
     @Column(name = "refund_reason")
@@ -113,14 +127,32 @@ public class Order {
     }
 
     public void recalculateTotal() {
-        this.totalAmount = items.stream()
+        BigDecimal itemsTotal = items.stream()
                 .map(OrderItem::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal shipping = (shippingCost != null) ? shippingCost : BigDecimal.ZERO;
+
+        this.totalAmount = itemsTotal.add(shipping);
     }
 
     public void startCheckout() {
         this.status = OrderStatus.AGUARDANDO_PAGAMENTO;
         this.checkoutStartedAt = LocalDateTime.now();
+    }
+
+    // ---- Frete ----
+
+    public void applyShipping(String optionCode, String optionName, BigDecimal cost, Integer estimatedDays) {
+        this.shippingOptionCode = optionCode;
+        this.shippingOptionName = optionName;
+        this.shippingCost = cost;
+        this.estimatedDeliveryDays = estimatedDays;
+        recalculateTotal();
+    }
+
+    public boolean hasShippingSelected() {
+        return this.shippingOptionCode != null;
     }
 
     public void markAsPaid() {
