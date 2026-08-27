@@ -84,6 +84,17 @@ public class SecurityConfig {
                         // stock — endpoints de teste manual, ADMIN só por enquanto (fluxo real vem com order)
                         .requestMatchers("/api/stock/**").hasRole("ADMIN")
 
+                        // order — rotas /me autenticadas, rotas admin fixas
+                        .requestMatchers("/api/orders/me/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/orders").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/orders/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/mark-paid").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/ship").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/deliver").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/cancel").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-approve").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-deny").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
