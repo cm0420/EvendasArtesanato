@@ -95,6 +95,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-deny").hasRole("ADMIN")
 
+                        // payment — webhook público, resto exige autenticação (rotas /me já cobertas por regra existente)
+                        .requestMatchers("/api/payments/webhook/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider(passwordEncoder()))
