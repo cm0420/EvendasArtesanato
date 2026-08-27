@@ -124,7 +124,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
 
 ## 3. DTOs
 
-`security/dto/SignupRequestDTO.java`
+`security/dto/SignupRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.security.dto;
@@ -132,7 +132,7 @@ package com.TadeuArtesanatos.demo.security.dto;
 import jakarta.validation.constraints.*;
 import org.hibernate.validator.constraints.br.CPF;
 
-public record SignupRequestDTO(
+public record SignupRequestDto(
 
         @NotBlank
         @Size(max = 100)
@@ -160,7 +160,7 @@ public record SignupRequestDTO(
 ) {}
 ```
 
-`security/dto/LoginRequestDTO.java`
+`security/dto/LoginRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.security.dto;
@@ -168,7 +168,7 @@ package com.TadeuArtesanatos.demo.security.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
-public record LoginRequestDTO(
+public record LoginRequestDto(
 
         @NotBlank
         @Email
@@ -179,18 +179,18 @@ public record LoginRequestDTO(
 ) {}
 ```
 
-`security/dto/TokenResponseDTO.java`
+`security/dto/TokenResponseDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.security.dto;
 
-public record TokenResponseDTO(
+public record TokenResponseDto(
         String accessToken,
         String tokenType,
         long expiresIn
 ) {
-    public static TokenResponseDTO of(String accessToken, long expiresIn) {
-        return new TokenResponseDTO(accessToken, "Bearer", expiresIn);
+    public static TokenResponseDto of(String accessToken, long expiresIn) {
+        return new TokenResponseDto(accessToken, "Bearer", expiresIn);
     }
 }
 ```
@@ -571,9 +571,9 @@ package com.TadeuArtesanatos.demo.security.service;
 
 import com.TadeuArtesanatos.demo.customer.entity.Customer;
 import com.TadeuArtesanatos.demo.customer.repository.CustomerRepository;
-import com.TadeuArtesanatos.demo.security.dto.LoginRequestDTO;
-import com.TadeuArtesanatos.demo.security.dto.SignupRequestDTO;
-import com.TadeuArtesanatos.demo.security.dto.TokenResponseDTO;
+import com.TadeuArtesanatos.demo.security.dto.LoginRequestDto;
+import com.TadeuArtesanatos.demo.security.dto.SignupRequestDto;
+import com.TadeuArtesanatos.demo.security.dto.TokenResponseDto;
 import com.TadeuArtesanatos.demo.security.entity.RefreshToken;
 import com.TadeuArtesanatos.demo.user.entity.Role;
 import com.TadeuArtesanatos.demo.user.entity.User;
@@ -596,10 +596,10 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
 
-    public record AuthResult(TokenResponseDTO tokens, String rawRefreshToken) {}
+    public record AuthResult(TokenResponseDto tokens, String rawRefreshToken) {}
 
     @Transactional
-    public AuthResult signup(SignupRequestDTO dto) {
+    public AuthResult signup(SignupRequestDto dto) {
         if (userRepository.existsByEmail(dto.email())) {
             throw new IllegalArgumentException("Email já cadastrado");
         }
@@ -630,7 +630,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public AuthResult login(LoginRequestDTO dto) {
+    public AuthResult login(LoginRequestDto dto) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(dto.email(), dto.password())
         );
@@ -659,7 +659,7 @@ public class AuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String rawRefreshToken = refreshTokenService.issue(user);
 
-        TokenResponseDTO tokenResponse = TokenResponseDTO.of(
+        TokenResponseDto tokenResponse = TokenResponseDto.of(
                 accessToken, jwtService.getAccessTokenExpirationMs() / 1000
         );
 
@@ -679,9 +679,9 @@ public class AuthService {
 ```java
 package com.TadeuArtesanatos.demo.security.controller;
 
-import com.TadeuArtesanatos.demo.security.dto.LoginRequestDTO;
-import com.TadeuArtesanatos.demo.security.dto.SignupRequestDTO;
-import com.TadeuArtesanatos.demo.security.dto.TokenResponseDTO;
+import com.TadeuArtesanatos.demo.security.dto.LoginRequestDto;
+import com.TadeuArtesanatos.demo.security.dto.SignupRequestDto;
+import com.TadeuArtesanatos.demo.security.dto.TokenResponseDto;
 import com.TadeuArtesanatos.demo.security.service.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -696,8 +696,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping(
         value = "/auth",
-        produces = MediaType.APPLICATION_JSON_VALUE,
-        consumes = MediaType.APPLICATION_JSON_VALUE
+        produces = MediaType.APPLICATION_JSON_VALUE
 )
 @RequiredArgsConstructor
 public class AuthController {
@@ -710,20 +709,20 @@ public class AuthController {
     @Value("${app.cookie.secure:true}")
     private boolean cookieSecure;
 
-    @PostMapping("/signup")
-    public ResponseEntity<TokenResponseDTO> signup(@Valid @RequestBody SignupRequestDTO dto) {
+    @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<TokenResponseDto> signup(@Valid @RequestBody SignupRequestDto dto) {
         AuthService.AuthResult result = authService.signup(dto);
         return respondWithTokens(result, HttpStatus.CREATED);
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<TokenResponseDTO> login(@Valid @RequestBody LoginRequestDTO dto) {
+    @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<TokenResponseDto> login(@Valid @RequestBody LoginRequestDto dto) {
         AuthService.AuthResult result = authService.login(dto);
         return respondWithTokens(result, HttpStatus.OK);
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponseDTO> refresh(
+    public ResponseEntity<TokenResponseDto> refresh(
             @CookieValue(name = REFRESH_COOKIE_NAME) String refreshToken
     ) {
         AuthService.AuthResult result = authService.refresh(refreshToken);
@@ -745,7 +744,7 @@ public class AuthController {
 
     // ---- helper ----
 
-    private ResponseEntity<TokenResponseDTO> respondWithTokens(AuthService.AuthResult result, HttpStatus status) {
+    private ResponseEntity<TokenResponseDto> respondWithTokens(AuthService.AuthResult result, HttpStatus status) {
         ResponseCookie refreshCookie = buildRefreshCookie(result.rawRefreshToken(), REFRESH_COOKIE_MAX_AGE_SECONDS);
 
         return ResponseEntity.status(status)

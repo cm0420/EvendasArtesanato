@@ -234,7 +234,7 @@ public interface AddressRepository extends JpaRepository<Address, UUID> {
 
 ## 4. DTOs
 
-`customer/dto/CustomerRequestDTO.java`
+`customer/dto/CustomerRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.customer.dto;
@@ -245,7 +245,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.hibernate.validator.constraints.br.CPF;
 
-public record CustomerRequestDTO(
+public record CustomerRequestDto(
 
         @NotBlank
         @Size(max = 100)
@@ -269,7 +269,7 @@ public record CustomerRequestDTO(
 ) {}
 ```
 
-`customer/dto/CustomerUpdateRequestDTO.java`
+`customer/dto/CustomerUpdateRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.customer.dto;
@@ -279,7 +279,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record CustomerUpdateRequestDTO(
+public record CustomerUpdateRequestDto(
 
         @NotBlank
         @Size(max = 100)
@@ -303,7 +303,7 @@ CPF não entra aqui — decisão pendente de confirmação sua (deixei como imut
 
 **Nota sobre `@CPF` + coluna `VARCHAR(11)`:** a anotação `@CPF` valida o CPF formatado ou não (`123.456.789-00` ou `12345678900`, ambos passam). Como a coluna no banco fica travada em 11 caracteres (mais restritivo, mais seguro), o `CustomerService` normaliza o valor (remove pontuação) antes de persistir — a validação do dígito verificador roda sobre o valor original recebido, e só depois ele é limpo pra gravação.
 
-`customer/dto/CustomerResponseDTO.java`
+`customer/dto/CustomerResponseDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.customer.dto;
@@ -312,19 +312,19 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-public record CustomerResponseDTO(
+public record CustomerResponseDto(
         UUID id,
         String firstName,
         String lastName,
         String email,
         String phone,
         String cpf,
-        List<AddressResponseDTO> addresses,
+        List<AddressResponseDto> addresses,
         LocalDateTime createdAt
 ) {}
 ```
 
-`customer/dto/AddressRequestDTO.java`
+`customer/dto/AddressRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.customer.dto;
@@ -333,7 +333,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record AddressRequestDTO(
+public record AddressRequestDto(
 
         @NotBlank
         @Size(max = 50)
@@ -373,14 +373,14 @@ public record AddressRequestDTO(
 ) {}
 ```
 
-`customer/dto/AddressResponseDTO.java`
+`customer/dto/AddressResponseDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.customer.dto;
 
 import java.util.UUID;
 
-public record AddressResponseDTO(
+public record AddressResponseDto(
         UUID id,
         String label,
         String recipientName,
@@ -406,8 +406,8 @@ public record AddressResponseDTO(
 ```java
 package com.TadeuArtesanatos.demo.customer.mapper;
 
-import com.TadeuArtesanatos.demo.customer.dto.AddressResponseDTO;
-import com.TadeuArtesanatos.demo.customer.dto.CustomerResponseDTO;
+import com.TadeuArtesanatos.demo.customer.dto.AddressResponseDto;
+import com.TadeuArtesanatos.demo.customer.dto.CustomerResponseDto;
 import com.TadeuArtesanatos.demo.customer.entity.Address;
 import com.TadeuArtesanatos.demo.customer.entity.Customer;
 import org.mapstruct.Mapper;
@@ -415,13 +415,13 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface CustomerMapper {
 
-    CustomerResponseDTO toResponseDTO(Customer customer);
+    CustomerResponseDto toResponseDto(Customer customer);
 
-    AddressResponseDTO toResponseDTO(Address address);
+    AddressResponseDto toResponseDto(Address address);
 }
 ```
 
-Criação e atualização (`CustomerRequestDTO → Customer`, `AddressRequestDTO → Address`) ficam manuais no Service — envolvem regra de negócio (checagem de duplicidade, vínculo com `User`, regra de `isDefault`), não é mapeamento puro.
+Criação e atualização (`CustomerRequestDto → Customer`, `AddressRequestDto → Address`) ficam manuais no Service — envolvem regra de negócio (checagem de duplicidade, vínculo com `User`, regra de `isDefault`), não é mapeamento puro.
 
 ---
 
@@ -456,7 +456,7 @@ public class CustomerService {
     private final CustomerMapper customerMapper;
 
     @Transactional
-    public CustomerResponseDTO createCustomer(CustomerRequestDTO dto, User authenticatedUser) {
+    public CustomerResponseDto createCustomer(CustomerRequestDto dto, User authenticatedUser) {
         String cpfNormalizado = dto.cpf().replaceAll("\\D", "");
 
         if (customerRepository.existsByEmail(dto.email())) {
@@ -476,23 +476,23 @@ public class CustomerService {
                 .build();
 
         Customer saved = customerRepository.save(customer);
-        return customerMapper.toResponseDTO(saved);
+        return customerMapper.toResponseDto(saved);
     }
 
     @Transactional(readOnly = true)
-    public CustomerResponseDTO findOwnProfile(User authenticatedUser) {
+    public CustomerResponseDto findOwnProfile(User authenticatedUser) {
         Customer customer = getActiveByUserOrThrow(authenticatedUser.getId());
-        return customerMapper.toResponseDTO(customer);
+        return customerMapper.toResponseDto(customer);
     }
 
     @Transactional(readOnly = true)
-    public CustomerResponseDTO findById(UUID id) {
+    public CustomerResponseDto findById(UUID id) {
         Customer customer = getActiveOrThrow(id);
-        return customerMapper.toResponseDTO(customer);
+        return customerMapper.toResponseDto(customer);
     }
 
     @Transactional
-    public CustomerResponseDTO updateOwnProfile(User authenticatedUser, CustomerUpdateRequestDTO dto) {
+    public CustomerResponseDto updateOwnProfile(User authenticatedUser, CustomerUpdateRequestDto dto) {
         Customer customer = getActiveByUserOrThrow(authenticatedUser.getId());
         return applyUpdate(customer, dto);
     }
@@ -504,17 +504,17 @@ public class CustomerService {
     }
 
     @Transactional
-    public AddressResponseDTO addOwnAddress(User authenticatedUser, AddressRequestDTO dto) {
+    public AddressResponseDto addOwnAddress(User authenticatedUser, AddressRequestDto dto) {
         Customer customer = getActiveByUserOrThrow(authenticatedUser.getId());
         return persistAddress(customer, dto);
     }
 
     @Transactional
-    public List<AddressResponseDTO> listOwnAddresses(User authenticatedUser) {
+    public List<AddressResponseDto> listOwnAddresses(User authenticatedUser) {
         Customer customer = getActiveByUserOrThrow(authenticatedUser.getId());
         return addressRepository.findAllByCustomerId(customer.getId())
                 .stream()
-                .map(customerMapper::toResponseDTO)
+                .map(customerMapper::toResponseDto)
                 .toList();
     }
 
@@ -531,7 +531,7 @@ public class CustomerService {
 
     // ---- helpers internos ----
 
-    private CustomerResponseDTO applyUpdate(Customer customer, CustomerUpdateRequestDTO dto) {
+    private CustomerResponseDto applyUpdate(Customer customer, CustomerUpdateRequestDto dto) {
         boolean emailPertenceAOutroCliente = customerRepository.findByEmail(dto.email())
                 .map(existing -> !existing.getId().equals(customer.getId()))
                 .orElse(false);
@@ -545,10 +545,10 @@ public class CustomerService {
         customer.setEmail(dto.email());
         customer.setPhone(dto.phone());
 
-        return customerMapper.toResponseDTO(customer);
+        return customerMapper.toResponseDto(customer);
     }
 
-    private AddressResponseDTO persistAddress(Customer customer, AddressRequestDTO dto) {
+    private AddressResponseDto persistAddress(Customer customer, AddressRequestDto dto) {
         if (Boolean.TRUE.equals(dto.isDefault())) {
             addressRepository.findAllByCustomerId(customer.getId())
                     .forEach(existing -> existing.setIsDefault(false));
@@ -570,7 +570,7 @@ public class CustomerService {
 
         customer.addAddress(address);
         Address saved = addressRepository.save(address);
-        return customerMapper.toResponseDTO(saved);
+        return customerMapper.toResponseDto(saved);
     }
 
     private Customer getActiveOrThrow(UUID id) {
@@ -622,25 +622,25 @@ public class CustomerController {
     // ---- Rotas /me — o próprio cliente autenticado, sem comparação de id ----
 
     @PostMapping(value = "/me", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<CustomerResponseDTO> createOwnProfile(
+    public ResponseEntity<CustomerResponseDto> createOwnProfile(
             @AuthenticationPrincipal User authenticatedUser,
-            @Valid @RequestBody CustomerRequestDTO dto
+            @Valid @RequestBody CustomerRequestDto dto
     ) {
-        CustomerResponseDTO created = customerService.createCustomer(dto, authenticatedUser);
+        CustomerResponseDto created = customerService.createCustomer(dto, authenticatedUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<CustomerResponseDTO> findOwnProfile(
+    public ResponseEntity<CustomerResponseDto> findOwnProfile(
             @AuthenticationPrincipal User authenticatedUser
     ) {
         return ResponseEntity.ok(customerService.findOwnProfile(authenticatedUser));
     }
 
     @PutMapping(value = "/me", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<CustomerResponseDTO> updateOwnProfile(
+    public ResponseEntity<CustomerResponseDto> updateOwnProfile(
             @AuthenticationPrincipal User authenticatedUser,
-            @Valid @RequestBody CustomerUpdateRequestDTO dto
+            @Valid @RequestBody CustomerUpdateRequestDto dto
     ) {
         return ResponseEntity.ok(customerService.updateOwnProfile(authenticatedUser, dto));
     }
@@ -654,16 +654,16 @@ public class CustomerController {
     }
 
     @PostMapping(value = "/me/addresses", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<AddressResponseDTO> addOwnAddress(
+    public ResponseEntity<AddressResponseDto> addOwnAddress(
             @AuthenticationPrincipal User authenticatedUser,
-            @Valid @RequestBody AddressRequestDTO dto
+            @Valid @RequestBody AddressRequestDto dto
     ) {
-        AddressResponseDTO created = customerService.addOwnAddress(authenticatedUser, dto);
+        AddressResponseDto created = customerService.addOwnAddress(authenticatedUser, dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping(value = "/me/addresses", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<AddressResponseDTO>> listOwnAddresses(
+    public ResponseEntity<List<AddressResponseDto>> listOwnAddresses(
             @AuthenticationPrincipal User authenticatedUser
     ) {
         return ResponseEntity.ok(customerService.listOwnAddresses(authenticatedUser));
@@ -681,7 +681,7 @@ public class CustomerController {
     // ---- Rota admin — qualquer cliente pelo id, regra fixa, vai no SecurityConfig ----
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<CustomerResponseDTO> findById(@PathVariable UUID id) {
+    public ResponseEntity<CustomerResponseDto> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(customerService.findById(id));
     }
 }
@@ -756,5 +756,5 @@ CREATE INDEX idx_addresses_customer_id ON addresses (customer_id);
 
 1. `ResourceNotFoundException` — mesma classe já usada no módulo `user` (`common/exception`).
 2. `@AuthenticationPrincipal User authenticatedUser` só funciona depois que o filtro JWT (módulo `security`) estiver populando o `SecurityContext` com o `User`. Até lá, esses parâmetros chegam `null` em qualquer teste manual.
-3. **Confirmar com você:** CPF fica mesmo fora do `CustomerUpdateRequestDTO` (imutável após cadastro)?
+3. **Confirmar com você:** CPF fica mesmo fora do `CustomerUpdateRequestDto` (imutável após cadastro)?
 4. **Confirmar com você:** o endpoint `POST /api/customers/me` assume que o `User` já foi criado antes (via módulo `user` ou um fluxo de registro público que ainda não desenhamos) — o cadastro completo do cliente final (criar `User` + criar `Customer` em sequência) ainda não tem um endpoint único de "signup" pensado. Vale discutir isso quando chegarmos em `security`/fluxo de registro.

@@ -262,8 +262,8 @@ class RefreshTokenServiceTest {
 package com.TadeuArtesanatos.demo.security.service;
 
 import com.TadeuArtesanatos.demo.customer.repository.CustomerRepository;
-import com.TadeuArtesanatos.demo.security.dto.LoginRequestDTO;
-import com.TadeuArtesanatos.demo.security.dto.SignupRequestDTO;
+import com.TadeuArtesanatos.demo.security.dto.LoginRequestDto;
+import com.TadeuArtesanatos.demo.security.dto.SignupRequestDto;
 import com.TadeuArtesanatos.demo.security.entity.RefreshToken;
 import com.TadeuArtesanatos.demo.user.entity.Role;
 import com.TadeuArtesanatos.demo.user.entity.User;
@@ -299,11 +299,11 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
-    private SignupRequestDTO signupDTO;
+    private SignupRequestDto signupDto;
 
     @BeforeEach
     void setUp() {
-        signupDTO = new SignupRequestDTO(
+        signupDto = new SignupRequestDto(
                 "Maria", "Silva", "maria@teste.com", "senha12345",
                 "(11) 91234-5678", "111.444.777-35" // CPF válido de teste (dígito verificador correto)
         );
@@ -311,9 +311,9 @@ class AuthServiceTest {
 
     @Test
     void signupDeveLancarExcecaoSeEmailJaExiste() {
-        when(userRepository.existsByEmail(signupDTO.email())).thenReturn(true);
+        when(userRepository.existsByEmail(signupDto.email())).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.signup(signupDTO))
+        assertThatThrownBy(() -> authService.signup(signupDto))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Email já cadastrado");
 
@@ -322,10 +322,10 @@ class AuthServiceTest {
 
     @Test
     void signupDeveLancarExcecaoSeCpfJaExiste() {
-        when(userRepository.existsByEmail(signupDTO.email())).thenReturn(false);
+        when(userRepository.existsByEmail(signupDto.email())).thenReturn(false);
         when(customerRepository.existsByCpf("11144477735")).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.signup(signupDTO))
+        assertThatThrownBy(() -> authService.signup(signupDto))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("CPF já cadastrado");
 
@@ -334,17 +334,17 @@ class AuthServiceTest {
 
     @Test
     void signupComDadosValidosDeveCriarUserECustomerEEmitirTokens() {
-        when(userRepository.existsByEmail(signupDTO.email())).thenReturn(false);
+        when(userRepository.existsByEmail(signupDto.email())).thenReturn(false);
         when(customerRepository.existsByCpf("11144477735")).thenReturn(false);
-        when(passwordEncoder.encode(signupDTO.password())).thenReturn("hash-senha");
+        when(passwordEncoder.encode(signupDto.password())).thenReturn("hash-senha");
         when(jwtService.generateAccessToken(any(User.class))).thenReturn("access-token-fake");
         when(jwtService.getAccessTokenExpirationMs()).thenReturn(900_000L);
         when(refreshTokenService.issue(any(User.class))).thenReturn("refresh-token-fake");
 
-        AuthService.AuthResult result = authService.signup(signupDTO);
+        AuthService.AuthResult result = authService.signup(signupDto);
 
         verify(userRepository).save(argThat(u ->
-                u.getEmail().equals(signupDTO.email()) &&
+                u.getEmail().equals(signupDto.email()) &&
                 u.getPassword().equals("hash-senha") &&
                 u.getRole() == Role.CLIENTE
         ));
@@ -359,7 +359,7 @@ class AuthServiceTest {
 
     @Test
     void loginComCredenciaisValidasDeveEmitirTokens() {
-        LoginRequestDTO loginDTO = new LoginRequestDTO("maria@teste.com", "senha12345");
+        LoginRequestDto loginDto = new LoginRequestDto("maria@teste.com", "senha12345");
         User user = User.builder().id(UUID.randomUUID()).email("maria@teste.com").role(Role.CLIENTE).build();
 
         when(userRepository.findByEmail("maria@teste.com")).thenReturn(Optional.of(user));
@@ -367,7 +367,7 @@ class AuthServiceTest {
         when(jwtService.getAccessTokenExpirationMs()).thenReturn(900_000L);
         when(refreshTokenService.issue(user)).thenReturn("refresh-token-fake");
 
-        AuthService.AuthResult result = authService.login(loginDTO);
+        AuthService.AuthResult result = authService.login(loginDto);
 
         verify(authenticationManager).authenticate(any());
         assertThat(result.tokens().accessToken()).isEqualTo("access-token-fake");

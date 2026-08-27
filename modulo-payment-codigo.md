@@ -389,6 +389,11 @@ public class PaymentService {
     private final PaymentWebhookHandler paymentWebhookHandler;
     private final PaymentMapper paymentMapper;
 
+    // Nota: a checagem `hasShippingSelected()` abaixo não existia nesta versão original
+    // do gabarito — foi adicionada pelo módulo `shipping` (ver modulo-shipping-codigo.md,
+    // seção "Edição necessária em payment"). Sem frete selecionado, POST
+    // /api/orders/me/{orderId}/payments devolve 409 "Selecione o frete antes de pagar".
+
     @Transactional
     public PaymentResponseDto initiatePayment(User authenticatedUser, UUID orderId, String simulateOutcome) {
         Customer customer = customerRepository.findByUserId(authenticatedUser.getId())
@@ -401,6 +406,10 @@ public class PaymentService {
 
         if (order.getStatus() != OrderStatus.AGUARDANDO_PAGAMENTO) {
             throw new InvalidStateException("Pedido não está aguardando pagamento (status atual: " + order.getStatus() + ")");
+        }
+
+        if (!order.hasShippingSelected()) {
+            throw new InvalidStateException("Selecione o frete antes de pagar");
         }
 
         PaymentInitiator.PaymentChargeResult chargeResult = paymentInitiator.charge(order, simulateOutcome);

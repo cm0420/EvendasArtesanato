@@ -164,7 +164,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
 ## 4. DTOs
 
-`user/dto/UserRequestDTO.java`
+`user/dto/UserRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.user.dto;
@@ -174,7 +174,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-public record UserRequestDTO(
+public record UserRequestDto(
 
         @NotBlank
         @Email
@@ -189,7 +189,7 @@ public record UserRequestDTO(
 ) {}
 ```
 
-`user/dto/UserUpdateRequestDTO.java`
+`user/dto/UserUpdateRequestDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.user.dto;
@@ -197,7 +197,7 @@ package com.TadeuArtesanatos.demo.user.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
-public record UserUpdateRequestDTO(
+public record UserUpdateRequestDto(
 
         @NotBlank
         @Email
@@ -205,21 +205,21 @@ public record UserUpdateRequestDTO(
 ) {}
 ```
 
-`user/dto/UserRoleUpdateDTO.java`
+`user/dto/UserRoleUpdateDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.user.dto;
 
 import jakarta.validation.constraints.NotNull;
 
-public record UserRoleUpdateDTO(
+public record UserRoleUpdateDto(
 
         @NotNull
         String role
 ) {}
 ```
 
-`user/dto/UserPasswordUpdateDTO.java`
+`user/dto/UserPasswordUpdateDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.user.dto;
@@ -227,7 +227,7 @@ package com.TadeuArtesanatos.demo.user.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public record UserPasswordUpdateDTO(
+public record UserPasswordUpdateDto(
 
         @NotBlank
         String currentPassword,
@@ -241,7 +241,7 @@ public record UserPasswordUpdateDTO(
 ) {}
 ```
 
-`user/dto/UserResponseDTO.java`
+`user/dto/UserResponseDto.java`
 
 ```java
 package com.TadeuArtesanatos.demo.user.dto;
@@ -249,7 +249,7 @@ package com.TadeuArtesanatos.demo.user.dto;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record UserResponseDTO(
+public record UserResponseDto(
         UUID id,
         String email,
         String role,
@@ -266,20 +266,20 @@ public record UserResponseDTO(
 ```java
 package com.TadeuArtesanatos.demo.user.mapper;
 
-import com.TadeuArtesanatos.demo.user.dto.UserResponseDTO;
+import com.TadeuArtesanatos.demo.user.dto.UserResponseDto;
 import com.TadeuArtesanatos.demo.user.entity.User;
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
 public interface UserMapper {
 
-    UserResponseDTO toResponseDTO(User user);
+    UserResponseDto toResponseDto(User user);
 }
 ```
 
-`role` é enum e `UserResponseDTO.role` é `String` — o MapStruct converte automaticamente via `.name()`, não precisa de método manual.
+`role` é enum e `UserResponseDto.role` é `String` — o MapStruct converte automaticamente via `.name()`, não precisa de método manual.
 
-Criação (`UserRequestDTO → User`) e atualização (`UserUpdateRequestDTO → User`) ficam com lógica manual no Service, porque envolvem regra de negócio (hash de senha, checagem de duplicidade) que não é mapeamento puro — não faz sentido colocar isso no mapper.
+Criação (`UserRequestDto → User`) e atualização (`UserUpdateRequestDto → User`) ficam com lógica manual no Service, porque envolvem regra de negócio (hash de senha, checagem de duplicidade) que não é mapeamento puro — não faz sentido colocar isso no mapper.
 
 ---
 
@@ -314,7 +314,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public UserResponseDTO createUser(UserRequestDTO dto) {
+    public UserResponseDto createUser(UserRequestDto dto) {
         if (userRepository.existsByEmail(dto.email())) {
             throw new IllegalArgumentException("Email já cadastrado");
         }
@@ -326,26 +326,26 @@ public class UserService {
                 .build();
 
         User saved = userRepository.save(user);
-        return userMapper.toResponseDTO(saved);
+        return userMapper.toResponseDto(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<UserResponseDTO> listUsers(Pageable pageable, Role role) {
+    public Page<UserResponseDto> listUsers(Pageable pageable, Role role) {
         Page<User> page = (role != null)
                 ? userRepository.findAllByRoleAndDeletedAtIsNull(role, pageable)
                 : userRepository.findAllByDeletedAtIsNull(pageable);
 
-        return page.map(userMapper::toResponseDTO);
+        return page.map(userMapper::toResponseDto);
     }
 
     @Transactional(readOnly = true)
-    public UserResponseDTO findById(UUID id) {
+    public UserResponseDto findById(UUID id) {
         User user = getActiveUserOrThrow(id);
-        return userMapper.toResponseDTO(user);
+        return userMapper.toResponseDto(user);
     }
 
     @Transactional
-    public UserResponseDTO updateUser(UUID id, UserUpdateRequestDTO dto) {
+    public UserResponseDto updateUser(UUID id, UserUpdateRequestDto dto) {
         User user = getActiveUserOrThrow(id);
 
         boolean emailPertenceAOutroUsuario = userRepository.findByEmail(dto.email())
@@ -358,18 +358,18 @@ public class UserService {
 
         user.setEmail(dto.email());
 
-        return userMapper.toResponseDTO(user);
+        return userMapper.toResponseDto(user);
     }
 
     @Transactional
-    public UserResponseDTO updateRole(UUID id, UserRoleUpdateDTO dto) {
+    public UserResponseDto updateRole(UUID id, UserRoleUpdateDto dto) {
         User user = getActiveUserOrThrow(id);
         user.setRole(Role.valueOf(dto.role()));
-        return userMapper.toResponseDTO(user);
+        return userMapper.toResponseDto(user);
     }
 
     @Transactional
-    public void changePassword(UUID id, UserPasswordUpdateDTO dto) {
+    public void changePassword(UUID id, UserPasswordUpdateDto dto) {
         User user = getActiveUserOrThrow(id);
 
         if (!passwordEncoder.matches(dto.currentPassword(), user.getPassword())) {
@@ -445,7 +445,7 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    public ResponseEntity<Page<UserResponseDTO>> listUsers(
+    public ResponseEntity<Page<UserResponseDto>> listUsers(
             Pageable pageable,
             @RequestParam(required = false) Role role
     ) {
@@ -453,28 +453,28 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> findById(@PathVariable UUID id) {
+    public ResponseEntity<UserResponseDto> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(userService.findById(id));
     }
 
     @PostMapping
-    public ResponseEntity<UserResponseDTO> createUser(@Valid @RequestBody UserRequestDTO dto) {
-        UserResponseDTO created = userService.createUser(dto);
+    public ResponseEntity<UserResponseDto> createUser(@Valid @RequestBody UserRequestDto dto) {
+        UserResponseDto created = userService.createUser(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> updateUser(
+    public ResponseEntity<UserResponseDto> updateUser(
             @PathVariable UUID id,
-            @Valid @RequestBody UserUpdateRequestDTO dto
+            @Valid @RequestBody UserUpdateRequestDto dto
     ) {
         return ResponseEntity.ok(userService.updateUser(id, dto));
     }
 
     @PatchMapping("/{id}/role")
-    public ResponseEntity<UserResponseDTO> updateRole(
+    public ResponseEntity<UserResponseDto> updateRole(
             @PathVariable UUID id,
-            @Valid @RequestBody UserRoleUpdateDTO dto
+            @Valid @RequestBody UserRoleUpdateDto dto
     ) {
         return ResponseEntity.ok(userService.updateRole(id, dto));
     }
@@ -483,7 +483,7 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
     public ResponseEntity<Void> changePassword(
             @PathVariable UUID id,
-            @Valid @RequestBody UserPasswordUpdateDTO dto
+            @Valid @RequestBody UserPasswordUpdateDto dto
     ) {
         userService.changePassword(id, dto);
         return ResponseEntity.noContent().build();

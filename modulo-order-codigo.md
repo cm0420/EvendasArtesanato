@@ -236,6 +236,10 @@ public class Order {
 }
 ```
 
+**Atualizado por módulos posteriores** (não refletido na classe acima, que é a versão original deste gabarito):
+- **Módulo `shipping`**: campos `shippingCost`, `shippingOptionCode`, `shippingOptionName`, `estimatedDeliveryDays`; métodos `applyShipping(...)` e `hasShippingSelected()`; `recalculateTotal()` passou a somar `itensTotal + frete` (antes só somava os itens). Ver `modulo-shipping-codigo.md`.
+- **Módulo `admin`**: campo `paidAt`; `markAsPaid()` passou a preenchê-lo (`this.paidAt = LocalDateTime.now();`), usado no relatório de vendas por período. Ver `modulo-admin-codigo.md`.
+
 ---
 
 ## 3. Entity `OrderItem`
@@ -472,6 +476,9 @@ public record OrderResponseDto(
         String recipientName,
         String shippingCity,
         String shippingState,
+        BigDecimal shippingCost,
+        String shippingOptionName,
+        Integer estimatedDeliveryDays,
         String trackingCode,
         LocalDateTime checkoutStartedAt,
         String refundReason,
@@ -480,6 +487,8 @@ public record OrderResponseDto(
         LocalDateTime createdAt
 ) {}
 ```
+
+**Atualizado pelo módulo `shipping`**: os 3 campos `shippingCost`, `shippingOptionName` e `estimatedDeliveryDays` não existiam nesta versão original do gabarito — foram adicionados quando o módulo `shipping` foi implementado (ver `modulo-shipping-codigo.md`). Ficam `null` até o cliente selecionar um frete (`POST /api/orders/me/{orderId}/shipping`). Refletido aqui pra quem for consumir esse DTO no front-end não depender de conhecer a ordem cronológica dos módulos.
 
 ---
 
