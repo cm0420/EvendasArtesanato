@@ -6,6 +6,7 @@ import com.TadeuArtesanatos.demo.user.dto.UserResponseDto;
 import com.TadeuArtesanatos.demo.user.dto.UserRoleUpdateDto;
 import com.TadeuArtesanatos.demo.user.dto.UserUpdateRequestDto;
 import com.TadeuArtesanatos.demo.user.entity.Role;
+import com.TadeuArtesanatos.demo.user.entity.User;
 import com.TadeuArtesanatos.demo.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -56,10 +58,11 @@ public class UserController {
 
     @PatchMapping("/{id}/role")
     public ResponseEntity<UserResponseDto> updateRole(
+            @AuthenticationPrincipal User currentUser,
             @PathVariable UUID id,
             @Valid @RequestBody UserRoleUpdateDto dto
     ) {
-        return ResponseEntity.ok(userService.updateRole(id, dto));
+        return ResponseEntity.ok(userService.updateRole(currentUser.getId(), id, dto));
     }
 
     @PatchMapping("/{id}/senha")
@@ -73,8 +76,8 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> softDeleteUser(@PathVariable UUID id) {
-        userService.softDeleteUser(id);
+    public ResponseEntity<Void> softDeleteUser(@AuthenticationPrincipal User currentUser, @PathVariable UUID id) {
+        userService.softDeleteUser(currentUser.getId(), id);
         return ResponseEntity.noContent().build();
     }
 }

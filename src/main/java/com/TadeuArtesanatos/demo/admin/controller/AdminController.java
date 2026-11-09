@@ -48,6 +48,19 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getSalesReport(startDate, endDate));
     }
 
+    @GetMapping(value = "/reports/sales-daily", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<DailySalesResponseDto>> getDailySales(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate
+    ) {
+        return ResponseEntity.ok(adminService.getDailySales(startDate, endDate));
+    }
+
+    @GetMapping(value = "/reports/orders-by-status", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<OrderStatusCountResponseDto>> getOrdersByStatus() {
+        return ResponseEntity.ok(adminService.getOrdersByStatus());
+    }
+
     @GetMapping(value = "/reports/best-selling-pieces", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<BestSellingPieceResponseDto>> getBestSellingPieces(
             @RequestParam(defaultValue = "10") int limit

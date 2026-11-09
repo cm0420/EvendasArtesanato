@@ -78,7 +78,11 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponseDto updateRole(UUID id, UserRoleUpdateDto dto) {
+    public UserResponseDto updateRole(UUID currentUserId, UUID id, UserRoleUpdateDto dto) {
+        // Sem isso o único admin podia se rebaixar e ninguém mais administrava a loja.
+        if (currentUserId.equals(id)) {
+            throw new IllegalArgumentException("Você não pode alterar o seu próprio papel");
+        }
         User user = getActiveUserOrThrow(id);
         user.setRole(Role.valueOf(dto.role()));
         return userMapper.toResponseDto(user);
@@ -102,7 +106,10 @@ public class UserService {
     }
 
     @Transactional
-    public void softDeleteUser(UUID id) {
+    public void softDeleteUser(UUID currentUserId, UUID id) {
+        if (currentUserId.equals(id)) {
+            throw new IllegalArgumentException("Você não pode excluir a sua própria conta por aqui");
+        }
         User user = getActiveUserOrThrow(id);
         user.softDelete();
         refreshTokenService.revokeAllForUser(user.getId());

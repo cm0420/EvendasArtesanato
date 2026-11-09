@@ -43,6 +43,19 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paidAt >= :start AND o.paidAt < :endExclusive")
     BigDecimal sumTotalPaidBetween(@Param("start") LocalDateTime start, @Param("endExclusive") LocalDateTime endExclusive);
 
+    /** Vendas pagas agrupadas por dia (só dias com venda; o service completa os dias vazios). */
+    @Query(value = """
+            SELECT CAST(paid_at AS date), COUNT(*), COALESCE(SUM(total_amount), 0)
+            FROM orders
+            WHERE paid_at >= :start AND paid_at < :endExclusive
+            GROUP BY CAST(paid_at AS date)
+            ORDER BY 1
+            """, nativeQuery = true)
+    List<Object[]> sumPaidByDay(@Param("start") LocalDateTime start, @Param("endExclusive") LocalDateTime endExclusive);
+
+    @Query("SELECT o.status, COUNT(o) FROM Order o WHERE o.status <> :excluded GROUP BY o.status")
+    List<Object[]> countByStatusExcluding(@Param("excluded") OrderStatus excluded);
+
     /** Trava a linha (SELECT ... FOR UPDATE) sem carregar a entidade; vazio se não existir. */
     @Query(value = "SELECT id FROM orders WHERE id = :id FOR UPDATE", nativeQuery = true)
     Optional<UUID> lockById(@Param("id") UUID id);

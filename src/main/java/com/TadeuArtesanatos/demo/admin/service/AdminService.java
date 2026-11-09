@@ -24,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 
@@ -90,6 +93,41 @@ public class AdminService {
         BigDecimal total = orderRepository.sumTotalPaidBetween(start, endExclusive);
 
         return new SalesReportResponseDto(startDate, endDate, count, total);
+    }
+
+    /** Máximo de dias por consulta: limita o tamanho da resposta e o custo da query. */
+    static final long MAX_REPORT_DAYS = 366;
+
+    @Transactional(readOnly = true)
+    public List<DailySalesResponseDto> getDailySales(LocalDate startDate, LocalDate endDate) {
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("A data final deve ser igual ou posterior à inicial");
+        }
+        if (ChronoUnit.DAYS.between(startDate, endDate) >= MAX_REPORT_DAYS) {
+            throw new IllegalArgumentException("O período máximo é de " + MAX_REPORT_DAYS + " dias");
+        }
+
+        Map<LocalDate, DailySalesResponseDto> byDay = new HashMap<>();
+        for (Object[] row : orderRepository.sumPaidByDay(startDate.atStartOfDay(), endDate.plusDays(1).atStartOfDay())) {
+            LocalDate day = row[0] instanceof java.sql.Date d ? d.toLocalDate() : (LocalDate) row[0];
+            byDay.put(day, new DailySalesResponseDto(day, ((Number) row[1]).longValue(), toBigDecimal(row[2])));
+        }
+
+        // Dias sem venda entram com zero: o gráfico precisa do eixo contínuo.
+        return startDate.datesUntil(endDate.plusDays(1))
+                .map(day -> byDay.getOrDefault(day, new DailySalesResponseDto(day, 0, BigDecimal.ZERO)))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderStatusCountResponseDto> getOrdersByStatus() {
+        return orderRepository.countByStatusExcluding(OrderStatus.CARRINHO).stream()
+                .map(row -> new OrderStatusCountResponseDto(((OrderStatus) row[0]).name(), ((Number) row[1]).longValue()))
+                .toList();
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        return value instanceof BigDecimal b ? b : new BigDecimal(value.toString());
     }
 
     @Transactional(readOnly = true)
