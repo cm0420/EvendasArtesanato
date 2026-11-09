@@ -5,6 +5,8 @@ import com.TadeuArtesanatos.demo.order.entity.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,5 +21,10 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     Page<Order> findAllByStatus(OrderStatus status, Pageable pageable);
 
-    List<Order> findAllByStatusAndCheckoutStartedAtBefore(OrderStatus status, LocalDateTime cutoff);
+    @Query("SELECT o.id FROM Order o WHERE o.status = :status AND o.checkoutStartedAt < :cutoff")
+    List<UUID> findIdsByStatusAndCheckoutStartedAtBefore(@Param("status") OrderStatus status, @Param("cutoff") LocalDateTime cutoff);
+
+    /** Trava a linha (SELECT ... FOR UPDATE) sem carregar a entidade; vazio se não existir. */
+    @Query(value = "SELECT id FROM orders WHERE id = :id FOR UPDATE", nativeQuery = true)
+    Optional<UUID> lockById(@Param("id") UUID id);
 }

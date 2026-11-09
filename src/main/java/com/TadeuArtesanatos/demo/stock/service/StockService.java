@@ -12,13 +12,17 @@ import com.TadeuArtesanatos.demo.stock.entity.StockReservation;
 import com.TadeuArtesanatos.demo.stock.mapper.StockReservationMapper;
 import com.TadeuArtesanatos.demo.stock.repository.StockAdjustmentRepository;
 import com.TadeuArtesanatos.demo.stock.repository.StockReservationRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 @Service
@@ -29,6 +33,7 @@ public class StockService {
     private final PieceRepository pieceRepository;
     private final StockReservationMapper reservationMapper;
     private final StockAdjustmentRepository stockAdjustmentRepository;
+    private final EntityManager entityManager;
 
     @Value("${app.stock.reservation-expiration-minutes:20}")
     private long reservationExpirationMinutes;
@@ -40,9 +45,10 @@ public class StockService {
      */
     @Transactional
     public StockReservationResponseDto reserve(ReserveStockRequestDto dto) {
-        Piece piece = pieceRepository.findByIdForUpdate(dto.pieceId())
-                .filter(Piece::isActive)
-                .orElseThrow(() -> new ResourceNotFoundException("Peça não encontrada"));
+        Piece piece = lockPiece(dto.pieceId());
+        if (!piece.isActive()) {
+            throw new ResourceNotFoundException("Peça não encontrada");
+        }
 
         if (piece.getStock() < dto.quantity()) {
             throw new InvalidStateException("Peça esgotada — estoque insuficiente para a quantidade solicitada");
@@ -93,17 +99,49 @@ public class StockService {
     }
 
     /**
-     * Chamado pelo job assíncrono (StockReservationCleanupJob) — varre reservas
-     * ACTIVE cujo prazo já passou, devolve o estoque e marca como EXPIRED.
+     * Reserva várias peças de uma vez, tudo ou nada. Trava as peças em ordem de id
+     * (evita deadlock entre checkouts com as mesmas peças em ordem diferente) e só
+     * altera estoque depois de verificar todas — devolve false sem mudar nada se
+     * alguma estiver inativa ou sem estoque suficiente.
      */
     @Transactional
-    public void releaseExpiredReservations() {
-        List<StockReservation> expired = reservationRepository
-                .findAllByStatusAndExpiresAtBefore(ReservationStatus.ACTIVE, LocalDateTime.now());
+    public boolean tryReserveAll(Map<UUID, Integer> quantityByPiece, UUID orderId) {
+        Map<UUID, Piece> locked = new TreeMap<>();
+        for (UUID pieceId : new TreeMap<>(quantityByPiece).keySet()) {
+            Piece piece = lockPiece(pieceId);
+            if (!piece.isActive() || piece.getStock() < quantityByPiece.get(pieceId)) {
+                return false;
+            }
+            locked.put(pieceId, piece);
+        }
 
-        for (StockReservation reservation : expired) {
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(reservationExpirationMinutes);
+        locked.forEach((pieceId, piece) -> {
+            int quantity = quantityByPiece.get(pieceId);
+            piece.setStock(piece.getStock() - quantity);
+            reservationRepository.save(StockReservation.builder()
+                    .piece(piece)
+                    .quantity(quantity)
+                    .orderId(orderId)
+                    .status(ReservationStatus.ACTIVE)
+                    .expiresAt(expiresAt)
+                    .build());
+        });
+        return true;
+    }
+
+    /** Pagamento aprovado: confirma todas as reservas ativas do pedido. */
+    @Transactional
+    public void confirmAllForOrder(UUID orderId) {
+        activeReservationsOf(orderId).forEach(StockReservation::confirm);
+    }
+
+    /** Pedido cancelado/expirado: devolve o estoque de todas as reservas ativas, em ordem de peça. */
+    @Transactional
+    public void releaseAllForOrder(UUID orderId) {
+        for (StockReservation reservation : activeReservationsOf(orderId)) {
             returnStockWithLock(reservation);
-            reservation.expire();
+            reservation.release();
         }
     }
 
@@ -113,8 +151,7 @@ public class StockService {
      */
     @Transactional
     public StockAdjustment adjustStock(UUID pieceId, Integer delta, String reason, String adjustedByEmail) {
-        Piece piece = pieceRepository.findByIdForUpdate(pieceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Peça não encontrada"));
+        Piece piece = lockPiece(pieceId);
 
         int novoEstoque = piece.getStock() + delta;
         if (novoEstoque < 0) {
@@ -147,9 +184,27 @@ public class StockService {
     }
 
     private void returnStockWithLock(StockReservation reservation) {
-        Piece piece = pieceRepository.findByIdForUpdate(reservation.getPiece().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Peça não encontrada"));
-
+        Piece piece = lockPiece(reservation.getPiece().getId());
         piece.setStock(piece.getStock() + reservation.getQuantity());
+    }
+
+    private List<StockReservation> activeReservationsOf(UUID orderId) {
+        return reservationRepository.findAllByOrderId(orderId).stream()
+                .filter(r -> r.getStatus() == ReservationStatus.ACTIVE)
+                .sorted(Comparator.comparing(r -> r.getPiece().getId()))
+                .toList();
+    }
+
+    /**
+     * Trava a linha primeiro e só depois relê o estado. Se a peça já estava na sessão
+     * (ex: veio junto com o carrinho), @Lock/refresh com lock do Hibernate devolvem o estoque
+     * lido antes do lock — e duas compras passam pela checagem.
+     */
+    private Piece lockPiece(UUID pieceId) {
+        pieceRepository.lockById(pieceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Peça não encontrada"));
+        Piece piece = pieceRepository.findById(pieceId).orElseThrow();
+        entityManager.refresh(piece);
+        return piece;
     }
 }

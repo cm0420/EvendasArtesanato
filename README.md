@@ -21,8 +21,8 @@ Backend de uma loja online de peças de artesanato pintadas à mão por um únic
 
 | | |
 |---|---|
-| **Lock pessimista no estoque** | A reserva faz `SELECT ... FOR UPDATE` (`@Lock(PESSIMISTIC_WRITE)`) na linha da peça. O segundo comprador espera a transação do primeiro e recebe "peça esgotada" se o estoque zerou. |
-| **Reserva com expiração** | O checkout **reserva** o estoque em vez de baixar de vez. Jobs `@Scheduled` liberam reservas vencidas (padrão de 20 min) e expiram pedidos não pagos, devolvendo as peças. |
+| **Lock pessimista no estoque** | A reserva faz `SELECT ... FOR UPDATE` na linha da peça e só então relê o estoque (lock antes da leitura; a entidade em cache do Hibernate não é confiável aqui). As peças são travadas em ordem de id para evitar deadlock. O segundo comprador espera a transação do primeiro e recebe "peça esgotada" se o estoque zerou. |
+| **Reserva com expiração** | O checkout **reserva** o estoque em vez de baixar de vez. Um job `@Scheduled` expira pedidos não pagos (padrão de 20 min) e devolve as peças na mesma transação, com o pedido travado. Pagamento que chega depois da expiração tenta reservar de novo; se a peça esgotou, o pedido vai para `ESTORNO_SOLICITADO`. |
 | **Máquina de estados do pedido** | `CARRINHO → AGUARDANDO_PAGAMENTO → PAGO → ENVIADO → ENTREGUE`, com ramos `CANCELADO`/`EXPIRADO` (devolvem estoque) e `ESTORNO_SOLICITADO → ESTORNADO`. |
 | **Pagamento desacoplado** | O core conhece só as interfaces `PaymentInitiator` e `PaymentWebhookHandler` (Interface Segregation). O provedor é escolhido por propriedade (`app.payment.provider`). Integrar Mercado Pago ou Stripe é escrever uma nova classe, sem mexer no core. |
 | **Webhook idempotente** | O `transaction_id` do gateway é `UNIQUE` e um pagamento já resolvido é ignorado. Um webhook repetido nunca marca o pedido como pago duas vezes. |
@@ -161,7 +161,7 @@ Segredos vêm sempre de variáveis de ambiente. Nada fica fixo no `application.y
 - [x] Reserva de estoque com lock pessimista e expiração
 - [x] Máquina de estados do pedido, estorno e backoffice
 - [x] Abstração de pagamento e frete com implementações fake e webhook idempotente
-- [ ] **Teste de concorrência com Testcontainers**: várias threads comprando a mesma peça única, e só uma pode conseguir
+- [x] **Teste de concorrência com Testcontainers**: várias threads comprando a mesma peça única, e só uma pode conseguir (`OrderConcurrencyTests`)
 - [ ] Testes de integração por módulo
 - [ ] Integração real com gateway de pagamento e com cotação de frete dos Correios
 - [ ] Front-end da loja e do painel (Angular, em desenvolvimento)

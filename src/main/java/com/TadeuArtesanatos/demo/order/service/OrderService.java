@@ -16,20 +16,21 @@ import com.TadeuArtesanatos.demo.order.entity.OrderItem;
 import com.TadeuArtesanatos.demo.order.entity.OrderStatus;
 import com.TadeuArtesanatos.demo.order.mapper.OrderMapper;
 import com.TadeuArtesanatos.demo.order.repository.OrderRepository;
-import com.TadeuArtesanatos.demo.stock.dto.ReserveStockRequestDto;
-import com.TadeuArtesanatos.demo.stock.entity.ReservationStatus;
-import com.TadeuArtesanatos.demo.stock.entity.StockReservation;
-import com.TadeuArtesanatos.demo.stock.repository.StockReservationRepository;
 import com.TadeuArtesanatos.demo.stock.service.StockService;
 import com.TadeuArtesanatos.demo.user.entity.User;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -42,8 +43,9 @@ public class OrderService {
     private final PieceRepository pieceRepository;
     private final PieceSetRepository pieceSetRepository;
     private final StockService stockService;
-    private final StockReservationRepository stockReservationRepository;
     private final OrderMapper orderMapper;
+    private final EntityManager entityManager;
+    private final TransactionTemplate transactionTemplate;
 
     // ---- Carrinho (CARRINHO) ----
 
@@ -134,7 +136,12 @@ public class OrderService {
 
     @Transactional
     public OrderResponseDto checkout(User authenticatedUser, CheckoutRequestDto dto) {
-        Order cart = getOwnCartOrThrow(authenticatedUser);
+        Order cart = lockOrder(getOwnCartOrThrow(authenticatedUser).getId());
+
+        // Duplo clique: o segundo checkout espera o lock e encontra o pedido já fora do carrinho.
+        if (!cart.isCart()) {
+            throw new InvalidStateException("Este carrinho já foi finalizado");
+        }
 
         if (cart.getItems().isEmpty()) {
             throw new InvalidStateException("Carrinho vazio — adicione ao menos um item antes de finalizar");
@@ -146,17 +153,9 @@ public class OrderService {
 
         applyShippingSnapshot(cart, address);
 
-        // Reserva estoque de cada item — se qualquer peça estiver esgotada,
-        // a transação inteira faz rollback (nenhuma reserva parcial fica presa).
-        // Item de kit: reserva a mesma quantidade em CADA peça componente.
-        for (OrderItem item : cart.getItems()) {
-            if (item.isPieceItem()) {
-                reserveForPiece(item.getPiece().getId(), item.getQuantity(), cart.getId());
-            } else {
-                for (Piece component : item.getPieceSet().getPieces()) {
-                    reserveForPiece(component.getId(), item.getQuantity(), cart.getId());
-                }
-            }
+        // Tudo ou nada: se qualquer peça estiver esgotada, nenhuma reserva é feita.
+        if (!stockService.tryReserveAll(quantityByPiece(cart), cart.getId())) {
+            throw new InvalidStateException("Peça esgotada — estoque insuficiente para a quantidade solicitada");
         }
 
         cart.startCheckout();
@@ -164,35 +163,33 @@ public class OrderService {
         return orderMapper.toResponseDto(cart);
     }
 
-    private void reserveForPiece(UUID pieceId, Integer quantity, UUID orderId) {
-        ReserveStockRequestDto reserveDto = new ReserveStockRequestDto(pieceId, quantity, orderId);
-        stockService.reserve(reserveDto);
-    }
-
     // ---- Confirmação de pagamento (temporária, manual — até `payment` existir) ----
 
     @Transactional
     public OrderResponseDto markAsPaid(UUID orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado"));
+        // Lock no pedido: webhook, job de expiração e cancelamento não podem decidir o status ao mesmo tempo.
+        Order order = lockOrder(orderId);
 
         // Idempotência: se já está pago (ou além), não repete a confirmação de estoque.
         if (order.isPaid()) {
             return orderMapper.toResponseDto(order);
         }
 
-        if (!order.isAwaitingPayment()) {
+        if (order.isAwaitingPayment()) {
+            stockService.confirmAllForOrder(order.getId());
+            order.markAsPaid();
+        } else if (order.getStatus() == OrderStatus.EXPIRADO) {
+            // Pagamento chegou depois da expiração: as peças já voltaram ao estoque.
+            // Tenta reservar de novo; se alguma esgotou, o dinheiro já foi cobrado → estorno para o admin.
+            if (stockService.tryReserveAll(quantityByPiece(order), order.getId())) {
+                stockService.confirmAllForOrder(order.getId());
+                order.markAsPaid();
+            } else {
+                order.requestRefund("Pagamento aprovado após a expiração do pedido, mas uma ou mais peças esgotaram");
+            }
+        } else {
             throw new InvalidStateException("Pedido não está aguardando pagamento (status atual: " + order.getStatus() + ")");
         }
-
-        List<StockReservation> reservations = stockReservationRepository.findAllByOrderId(order.getId());
-        for (StockReservation reservation : reservations) {
-            if (reservation.getStatus() == ReservationStatus.ACTIVE) {
-                stockService.confirm(reservation.getId());
-            }
-        }
-
-        order.markAsPaid();
 
         return orderMapper.toResponseDto(order);
     }
@@ -233,19 +230,17 @@ public class OrderService {
     public void cancelOwnOrder(User authenticatedUser, UUID orderId) {
         Customer customer = getCustomerOrThrow(authenticatedUser);
 
-        Order order = orderRepository.findById(orderId)
-                .filter(o -> o.getCustomer().getId().equals(customer.getId()))
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado"));
+        Order order = lockOrder(orderId);
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new ResourceNotFoundException("Pedido não encontrado");
+        }
 
         cancelInternal(order);
     }
 
     @Transactional
     public void cancelAsAdmin(UUID orderId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado"));
-
-        cancelInternal(order);
+        cancelInternal(lockOrder(orderId));
     }
 
     private void cancelInternal(Order order) {
@@ -254,12 +249,7 @@ public class OrderService {
         }
 
         if (order.isAwaitingPayment()) {
-            List<StockReservation> reservations = stockReservationRepository.findAllByOrderId(order.getId());
-            for (StockReservation reservation : reservations) {
-                if (reservation.getStatus() == ReservationStatus.ACTIVE) {
-                    stockService.release(reservation.getId());
-                }
-            }
+            stockService.releaseAllForOrder(order.getId());
         }
 
         order.cancel();
@@ -345,19 +335,20 @@ public class OrderService {
 
     // ---- Expiração automática (chamada pelo job) ----
 
-    @Transactional
+    /** Cada pedido expira na sua própria transação: locks curtos e uma falha não desfaz as outras. */
     public void expireStaleCheckouts(long expirationMinutes) {
-        var cutoff = java.time.LocalDateTime.now().minusMinutes(expirationMinutes);
-        List<Order> stale = orderRepository.findAllByStatusAndCheckoutStartedAtBefore(OrderStatus.AGUARDANDO_PAGAMENTO, cutoff);
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(expirationMinutes);
+        List<UUID> staleIds = orderRepository.findIdsByStatusAndCheckoutStartedAtBefore(OrderStatus.AGUARDANDO_PAGAMENTO, cutoff);
 
-        for (Order order : stale) {
-            List<StockReservation> reservations = stockReservationRepository.findAllByOrderId(order.getId());
-            for (StockReservation reservation : reservations) {
-                if (reservation.getStatus() == ReservationStatus.ACTIVE) {
-                    stockService.release(reservation.getId());
+        for (UUID orderId : staleIds) {
+            transactionTemplate.executeWithoutResult(tx -> {
+                Order order = lockOrder(orderId);
+                // Reconfere depois do lock: o pagamento pode ter chegado entre a busca e o lock.
+                if (order.isAwaitingPayment() && order.getCheckoutStartedAt().isBefore(cutoff)) {
+                    stockService.releaseAllForOrder(order.getId());
+                    order.expire();
                 }
-            }
-            order.expire();
+            });
         }
     }
 
@@ -392,5 +383,26 @@ public class OrderService {
         order.setShippingNeighborhood(address.getNeighborhood());
         order.setShippingCity(address.getCity());
         order.setShippingState(address.getState());
+    }
+
+    /** Trava a linha primeiro e só depois relê o estado (mesmo motivo do lockPiece no StockService). */
+    private Order lockOrder(UUID orderId) {
+        orderRepository.lockById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado"));
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        entityManager.refresh(order);
+        return order;
+    }
+
+    /** Soma por peça: item avulso conta a peça, item de kit conta cada peça componente. */
+    private Map<UUID, Integer> quantityByPiece(Order order) {
+        Map<UUID, Integer> quantities = new HashMap<>();
+        for (OrderItem item : order.getItems()) {
+            List<Piece> pieces = item.isPieceItem() ? List.of(item.getPiece()) : List.copyOf(item.getPieceSet().getPieces());
+            for (Piece piece : pieces) {
+                quantities.merge(piece.getId(), item.getQuantity(), Integer::sum);
+            }
+        }
+        return quantities;
     }
 }
