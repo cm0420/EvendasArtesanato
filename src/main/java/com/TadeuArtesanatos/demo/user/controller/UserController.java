@@ -20,9 +20,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping(value ="/api/users",
-        produces = MediaType.APPLICATION_JSON_VALUE,
-        consumes = MediaType.APPLICATION_JSON_VALUE)
+// sem consumes na classe: GET não tem corpo nem Content-Type e respondia 415
+@RequestMapping(value = "/api/users", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
 public class UserController {
 

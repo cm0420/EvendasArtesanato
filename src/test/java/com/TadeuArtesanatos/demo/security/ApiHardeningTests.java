@@ -160,6 +160,11 @@ class ApiHardeningTests {
     }
 
     @Test
+    void adminListaUsuariosSemContentType() throws Exception {
+        mvc.perform(get("/api/users").with(user(fakeUser(Role.ADMIN)))).andExpect(status().isOk());
+    }
+
+    @Test
     void preAuthorizeNegadoDevolve403() throws Exception {
         mvc.perform(patch("/api/users/" + UUID.randomUUID() + "/senha").with(user(fakeUser(Role.CLIENTE)))
                         .contentType(MediaType.APPLICATION_JSON)
