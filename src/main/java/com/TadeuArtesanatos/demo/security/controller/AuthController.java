@@ -3,6 +3,7 @@ import com.TadeuArtesanatos.demo.security.dto.LoginRequestDto;
 import com.TadeuArtesanatos.demo.security.dto.SignupRequestDto;
 import com.TadeuArtesanatos.demo.security.dto.TokenResponseDto;
 import com.TadeuArtesanatos.demo.security.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +31,8 @@ public class AuthController {
         return respondWithTokens(result, HttpStatus.CREATED);
     }
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<TokenResponseDto> login(@Valid @RequestBody LoginRequestDto dto) {
-        AuthService.AuthResult result = authService.login(dto);
+    public ResponseEntity<TokenResponseDto> login(@Valid @RequestBody LoginRequestDto dto, HttpServletRequest request) {
+        AuthService.AuthResult result = authService.login(dto, request.getRemoteAddr());
         return respondWithTokens(result, HttpStatus.OK);
     }
     @PostMapping("/refresh")

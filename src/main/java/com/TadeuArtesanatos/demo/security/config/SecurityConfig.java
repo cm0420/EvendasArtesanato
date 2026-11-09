@@ -37,6 +37,9 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Value("${app.cors.allowed-origins}")
+    private String[] corsAllowedOrigins;
+
     @Value("${app.payment.fake-open-simulation:false}")
     private boolean fakePaymentOpenSimulation;
 
@@ -127,7 +130,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000")); // trocar pelo domínio real do front em prod
+        config.setAllowedOrigins(List.of(corsAllowedOrigins));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true); // obrigatório para o cookie HttpOnly do refresh token trafegar

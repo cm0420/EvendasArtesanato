@@ -12,6 +12,7 @@ import com.TadeuArtesanatos.demo.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final LoginAttemptService loginAttemptService;
 
     public record AuthResult(TokenResponseDto tokens, String rawRefreshToken) {
     }
@@ -62,10 +64,19 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResult login(LoginRequestDto dto) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(dto.email(), dto.password())
-        );
+    public AuthResult login(LoginRequestDto dto, String clientIp) {
+        String attemptKey = clientIp + "|" + dto.email().toLowerCase();
+        loginAttemptService.checkAllowed(attemptKey);
+
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(dto.email(), dto.password())
+            );
+        } catch (AuthenticationException e) {
+            loginAttemptService.recordFailure(attemptKey);
+            throw e;
+        }
+        loginAttemptService.recordSuccess(attemptKey);
 
         User user = userRepository.findByEmail(dto.email())
                 .orElseThrow(() -> new IllegalArgumentException("Credenciais inválidas"));

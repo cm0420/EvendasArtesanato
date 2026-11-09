@@ -19,6 +19,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Roda como "fora de dev": simulação de pagamento fechada. */
@@ -56,12 +57,7 @@ class ApiHardeningTests {
 
     @Test
     void refreshTokenFuncionaUmaVezSo() throws Exception {
-        String email = UUID.randomUUID() + "@teste.com";
-        Cookie first = mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON).content("""
-                        {"firstName":"Ana","lastName":"Teste","email":"%s","password":"senha12345",
-                         "phone":"11999999999","cpf":"%s"}""".formatted(email, validCpf())))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getCookie("refresh_token");
+        Cookie first = signup(UUID.randomUUID() + "@teste.com");
 
         Cookie second = mvc.perform(post("/auth/refresh").cookie(first))
                 .andExpect(status().isOk())
@@ -70,6 +66,34 @@ class ApiHardeningTests {
 
         mvc.perform(post("/auth/refresh").cookie(first)).andExpect(status().isBadRequest());
         mvc.perform(post("/auth/refresh").cookie(second)).andExpect(status().isOk());
+    }
+
+    // ---- item 9: limite de login e CORS ----
+
+    @Test
+    void loginBloqueiaDepoisDeCincoSenhasErradas() throws Exception {
+        String email = UUID.randomUUID() + "@teste.com";
+        signup(email);
+
+        for (int i = 0; i < 5; i++) {
+            mvc.perform(login(email, "senha-errada")).andExpect(status().isUnauthorized());
+        }
+        // bloqueado mesmo com a senha certa, até a janela passar
+        mvc.perform(login(email, "senha12345")).andExpect(status().isTooManyRequests());
+        // outro IP não é afetado
+        mvc.perform(login(email, "senha12345").with(r -> { r.setRemoteAddr("10.0.0.2"); return r; }))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void corsAceitaOFrontAngular() throws Exception {
+        mvc.perform(options("/api/catalog/pieces").header("Origin", "http://localhost:4200")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
+        mvc.perform(options("/api/catalog/pieces").header("Origin", "http://evil.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
     }
 
     // ---- item 7: erros do cliente não viram 500 ----
@@ -102,6 +126,19 @@ class ApiHardeningTests {
     }
 
     // ---- fixtures ----
+
+    private Cookie signup(String email) throws Exception {
+        return mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"firstName":"Ana","lastName":"Teste","email":"%s","password":"senha12345",
+                         "phone":"11999999999","cpf":"%s"}""".formatted(email, validCpf())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getCookie("refresh_token");
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder login(String email, String password) {
+        return post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password));
+    }
 
     private static User fakeUser(Role role) {
         return User.builder().id(UUID.randomUUID()).email(role + "@teste.com").password("x").role(role).build();
