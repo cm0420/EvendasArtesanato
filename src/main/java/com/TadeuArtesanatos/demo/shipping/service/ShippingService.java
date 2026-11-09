@@ -12,6 +12,8 @@ import com.TadeuArtesanatos.demo.order.repository.OrderRepository;
 import com.TadeuArtesanatos.demo.shipping.dto.ShippingQuoteResponseDto;
 import com.TadeuArtesanatos.demo.shipping.gateway.ShippingProvider;
 import com.TadeuArtesanatos.demo.user.entity.User;
+import com.TadeuArtesanatos.demo.payment.entity.PaymentStatus;
+import com.TadeuArtesanatos.demo.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class ShippingService {
     private final CustomerRepository customerRepository;
     private final ShippingProvider shippingProvider;
     private final OrderMapper orderMapper;
+    private final PaymentRepository paymentRepository;
 
     @Transactional(readOnly = true)
     public List<ShippingQuoteResponseDto> getQuotes(User authenticatedUser, UUID orderId) {
@@ -40,6 +43,11 @@ public class ShippingService {
     @Transactional
     public OrderResponseDto selectShipping(User authenticatedUser, UUID orderId, String code) {
         Order order = getOwnOrderAwaitingPaymentOrThrow(authenticatedUser, orderId);
+
+        // O valor do pagamento é gravado ao iniciar; mudar o frete depois faria pagar o total antigo.
+        if (paymentRepository.existsByOrderIdAndStatusIn(order.getId(), PaymentStatus.LIVE)) {
+            throw new InvalidStateException("O frete não pode ser alterado depois de iniciar o pagamento");
+        }
 
         ShippingProvider.ShippingQuote selected = shippingProvider.quote(order).stream()
                 .filter(q -> q.code().equalsIgnoreCase(code))

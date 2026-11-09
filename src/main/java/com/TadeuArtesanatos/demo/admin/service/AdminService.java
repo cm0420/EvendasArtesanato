@@ -84,18 +84,12 @@ public class AdminService {
     @Transactional(readOnly = true)
     public SalesReportResponseDto getSalesReport(LocalDate startDate, LocalDate endDate) {
         LocalDateTime start = startDate.atStartOfDay();
-        LocalDateTime end = endDate.atTime(23, 59, 59);
+        LocalDateTime endExclusive = endDate.plusDays(1).atStartOfDay();
 
-        List<Order> paidOrders = orderRepository.findAll().stream()
-                .filter(o -> o.getPaidAt() != null)
-                .filter(o -> !o.getPaidAt().isBefore(start) && !o.getPaidAt().isAfter(end))
-                .toList();
+        long count = orderRepository.countByPaidAtGreaterThanEqualAndPaidAtLessThan(start, endExclusive);
+        BigDecimal total = orderRepository.sumTotalPaidBetween(start, endExclusive);
 
-        BigDecimal total = paidOrders.stream()
-                .map(Order::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        return new SalesReportResponseDto(startDate, endDate, paidOrders.size(), total);
+        return new SalesReportResponseDto(startDate, endDate, count, total);
     }
 
     @Transactional(readOnly = true)

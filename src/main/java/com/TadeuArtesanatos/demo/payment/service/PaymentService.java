@@ -52,6 +52,11 @@ public class PaymentService {
             throw new InvalidStateException("Selecione o frete antes de pagar");
         }
 
+        // Dois pagamentos aprovados para o mesmo pedido = cobrança dupla (o segundo seria ignorado).
+        if (paymentRepository.existsByOrderIdAndStatusIn(order.getId(), PaymentStatus.LIVE)) {
+            throw new InvalidStateException("Já existe um pagamento em andamento para este pedido");
+        }
+
         PaymentInitiator.PaymentChargeResult chargeResult = paymentInitiator.charge(order, simulateOutcome);
 
         Payment payment = Payment.builder()

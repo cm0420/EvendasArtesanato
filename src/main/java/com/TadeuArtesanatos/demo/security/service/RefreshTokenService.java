@@ -15,6 +15,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +50,12 @@ public class RefreshTokenService {
     @Transactional
     public void revoke(RefreshToken refreshToken) {
         refreshToken.revoke();
+    }
+
+    /** Derruba todas as sessões do usuário (senha trocada, conta excluída). */
+    @Transactional
+    public void revokeAllForUser(UUID userId) {
+        refreshTokenRepository.revokeAllByUserId(userId);
     }
 
     /** Diário, 3h: apaga tokens expirados ou revogados — só servem para crescer a tabela. */

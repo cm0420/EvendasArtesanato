@@ -26,8 +26,8 @@ public class AuthController {
     @Value("${app.cookie.secure:true}")
     private boolean cookieSecure;
     @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<TokenResponseDto> signup(@Valid @RequestBody SignupRequestDto dto) {
-        AuthService.AuthResult result = authService.signup(dto);
+    public ResponseEntity<TokenResponseDto> signup(@Valid @RequestBody SignupRequestDto dto, HttpServletRequest request) {
+        AuthService.AuthResult result = authService.signup(dto, request.getRemoteAddr());
         return respondWithTokens(result, HttpStatus.CREATED);
     }
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)

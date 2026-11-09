@@ -29,6 +29,9 @@ jwt:
   expiration: ${JWT_EXPIRATION:3600000}
 
 server:
+  # IP real do cliente a partir do X-Forwarded-For do load balancer da hospedagem
+  # (o limite de login/cadastro é por IP; sem isso todo mundo teria o IP do balanceador)
+  forward-headers-strategy: native
   error:
     include-stacktrace: never
     include-message: never

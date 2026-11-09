@@ -5,6 +5,10 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   jpa:
     open-in-view: false
+  data:
+    web:
+      pageable:
+        max-page-size: 50  # o padrão é 2000; catálogo é público
   flyway:
     enabled: true
 

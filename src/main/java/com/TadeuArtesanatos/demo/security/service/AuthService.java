@@ -27,13 +27,24 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
-    private final LoginAttemptService loginAttemptService;
+    private final AuthRateLimiter rateLimiter;
+
+    // Por conta: barra força bruta numa senha. Por IP: barra testar uma senha comum em muitas contas
+    // (e o custo de CPU do bcrypt). A chave da conta inclui o IP para ninguém travar a conta alheia.
+    static final int MAX_LOGIN_FAILURES_PER_ACCOUNT = 5;
+    static final int MAX_LOGIN_FAILURES_PER_IP = 30;
+    // Cadastro conta toda tentativa: impede varrer CPFs/emails pela mensagem "já cadastrado".
+    static final int MAX_SIGNUPS_PER_IP = 10;
 
     public record AuthResult(TokenResponseDto tokens, String rawRefreshToken) {
     }
 
     @Transactional
-    public AuthResult signup(SignupRequestDto dto) {
+    public AuthResult signup(SignupRequestDto dto, String clientIp) {
+        String signupKey = "signup|" + clientIp;
+        rateLimiter.checkAllowed(signupKey, MAX_SIGNUPS_PER_IP);
+        rateLimiter.record(signupKey);
+
         if (userRepository.existsByEmail(dto.email())) {
             throw new IllegalArgumentException("Email já cadastrado");
         }
@@ -65,18 +76,22 @@ public class AuthService {
 
     @Transactional
     public AuthResult login(LoginRequestDto dto, String clientIp) {
-        String attemptKey = clientIp + "|" + dto.email().toLowerCase();
-        loginAttemptService.checkAllowed(attemptKey);
+        String ipKey = "login-ip|" + clientIp;
+        String accountKey = "login|" + clientIp + "|" + dto.email().toLowerCase();
+        rateLimiter.checkAllowed(ipKey, MAX_LOGIN_FAILURES_PER_IP);
+        rateLimiter.checkAllowed(accountKey, MAX_LOGIN_FAILURES_PER_ACCOUNT);
 
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(dto.email(), dto.password())
             );
         } catch (AuthenticationException e) {
-            loginAttemptService.recordFailure(attemptKey);
+            rateLimiter.record(ipKey);
+            rateLimiter.record(accountKey);
             throw e;
         }
-        loginAttemptService.recordSuccess(attemptKey);
+        // só zera a da conta: um atacante com uma conta válida não pode zerar a contagem do IP
+        rateLimiter.reset(accountKey);
 
         User user = userRepository.findByEmail(dto.email())
                 .orElseThrow(() -> new IllegalArgumentException("Credenciais inválidas"));

@@ -11,14 +11,21 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import com.jayway.jsonpath.JsonPath;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -81,7 +88,7 @@ class ApiHardeningTests {
         // bloqueado mesmo com a senha certa, até a janela passar
         mvc.perform(login(email, "senha12345")).andExpect(status().isTooManyRequests());
         // outro IP não é afetado
-        mvc.perform(login(email, "senha12345").with(r -> { r.setRemoteAddr("10.0.0.2"); return r; }))
+        mvc.perform(login(email, "senha12345").with(from("10.0.0.2")))
                 .andExpect(status().isOk());
     }
 
@@ -94,6 +101,51 @@ class ApiHardeningTests {
         mvc.perform(options("/api/catalog/pieces").header("Origin", "http://evil.example")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void loginLimitadoPorIpMesmoTrocandoOEmail() throws Exception {
+        String ip = "10.8.8.8";
+        for (int i = 0; i < 30; i++) {
+            mvc.perform(login(UUID.randomUUID() + "@teste.com", "senha123").with(from(ip)))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(login(UUID.randomUUID() + "@teste.com", "senha123").with(from(ip)))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void cadastroLimitadoPorIp() throws Exception {
+        String ip = "10.9.9.9";
+        for (int i = 0; i < 10; i++) {
+            mvc.perform(signupRequest(UUID.randomUUID() + "@teste.com").with(from(ip))).andExpect(status().isCreated());
+        }
+        mvc.perform(signupRequest(UUID.randomUUID() + "@teste.com").with(from(ip)))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void trocarSenhaDerrubaAsSessoesAbertas() throws Exception {
+        MockHttpServletResponse signup = mvc.perform(signupRequest(UUID.randomUUID() + "@teste.com").with(from(randomIp())))
+                .andExpect(status().isCreated()).andReturn().getResponse();
+        Cookie stolenCookie = signup.getCookie("refresh_token");
+        String accessToken = JsonPath.read(signup.getContentAsString(), "$.accessToken");
+        String jwtPayload = new String(Base64.getUrlDecoder().decode(accessToken.split("\\.")[1]));
+        String userId = JsonPath.read(jwtPayload, "$.userId");
+
+        mvc.perform(patch("/api/users/" + userId + "/senha").header("Authorization", "Bearer " + accessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"senha12345\",\"newPassword\":\"novaSenha99\",\"confirmPassword\":\"novaSenha99\"}"))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/auth/refresh").cookie(stolenCookie)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void catalogoPublicoNaoDevolvePaginaGigante() throws Exception {
+        mvc.perform(get("/api/catalog/pieces?size=2000"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("\"size\":50")));
     }
 
     // ---- item 7: erros do cliente não viram 500 ----
@@ -127,15 +179,28 @@ class ApiHardeningTests {
 
     // ---- fixtures ----
 
+    /** Cadastro de um IP aleatório, para não esbarrar no limite de cadastros por IP. */
     private Cookie signup(String email) throws Exception {
-        return mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON).content("""
-                        {"firstName":"Ana","lastName":"Teste","email":"%s","password":"senha12345",
-                         "phone":"11999999999","cpf":"%s"}""".formatted(email, validCpf())))
+        return mvc.perform(signupRequest(email).with(from(randomIp())))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getCookie("refresh_token");
     }
 
-    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder login(String email, String password) {
+    private static MockHttpServletRequestBuilder signupRequest(String email) {
+        return post("/auth/signup").contentType(MediaType.APPLICATION_JSON).content("""
+                {"firstName":"Ana","lastName":"Teste","email":"%s","password":"senha12345",
+                 "phone":"11999999999","cpf":"%s"}""".formatted(email, validCpf()));
+    }
+
+    private static RequestPostProcessor from(String ip) {
+        return r -> { r.setRemoteAddr(ip); return r; };
+    }
+
+    private static String randomIp() {
+        return "10.1." + ThreadLocalRandom.current().nextInt(256) + "." + ThreadLocalRandom.current().nextInt(256);
+    }
+
+    private static MockHttpServletRequestBuilder login(String email, String password) {
         return post("/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password));
     }

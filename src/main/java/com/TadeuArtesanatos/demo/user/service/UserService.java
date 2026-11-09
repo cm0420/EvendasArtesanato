@@ -10,6 +10,7 @@ import com.TadeuArtesanatos.demo.user.entity.Role;
 import com.TadeuArtesanatos.demo.user.entity.User;
 import com.TadeuArtesanatos.demo.user.mapper.UserMapper;
 import com.TadeuArtesanatos.demo.user.repository.UserRepository;
+import com.TadeuArtesanatos.demo.security.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +27,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenService refreshTokenService;
 
     @Transactional
     public UserResponseDto createUser(UserRequestDto dto) {
@@ -95,12 +97,15 @@ public class UserService {
         }
 
         user.setPassword(passwordEncoder.encode(dto.newPassword()));
+        // Quem roubou o cookie de refresh continuaria logado para sempre (cada refresh renova 7 dias).
+        refreshTokenService.revokeAllForUser(user.getId());
     }
 
     @Transactional
     public void softDeleteUser(UUID id) {
         User user = getActiveUserOrThrow(id);
         user.softDelete();
+        refreshTokenService.revokeAllForUser(user.getId());
     }
 
     @Transactional(readOnly = true)

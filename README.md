@@ -6,7 +6,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_4.1-0d1117?style=flat-square&logo=springboot&logoColor=6DB33F)
 ![Spring Security](https://img.shields.io/badge/JWT_+_refresh_token-0d1117?style=flat-square&logo=springsecurity&logoColor=6DB33F)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-0d1117?style=flat-square&logo=postgresql&logoColor=4169E1)
-![Flyway](https://img.shields.io/badge/Flyway_·_18_migrations-0d1117?style=flat-square&logo=flyway&logoColor=CC0200)
+![Flyway](https://img.shields.io/badge/Flyway_·_19_migrations-0d1117?style=flat-square&logo=flyway&logoColor=CC0200)
 ![Docker](https://img.shields.io/badge/Docker-0d1117?style=flat-square&logo=docker&logoColor=2496ED)
 ![Swagger](https://img.shields.io/badge/OpenAPI-0d1117?style=flat-square&logo=swagger&logoColor=85EA2D)
 ![Status](https://img.shields.io/badge/status-em_desenvolvimento-0d1117?style=flat-square&color=8a6d1f)
@@ -139,7 +139,7 @@ cp .env.example .env
 ./mvnw spring-boot:run
 ```
 
-No profile `dev`, o **Spring Boot Docker Compose Support** sobe o Postgres pelo `compose.yaml` e o Flyway aplica as 18 migrations. Os gateways de pagamento e frete usam as implementações fake.
+No profile `dev`, o **Spring Boot Docker Compose Support** sobe o Postgres pelo `compose.yaml` e o Flyway aplica as 19 migrations. Os gateways de pagamento e frete usam as implementações fake.
 
 **Simulando o ambiente de produção** (imagem multi-stage com JRE enxuta e Postgres com volume):
 

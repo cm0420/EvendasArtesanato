@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -53,14 +52,8 @@ public class OrderService {
     public OrderResponseDto getOrCreateCart(User authenticatedUser) {
         Customer customer = getCustomerOrThrow(authenticatedUser);
 
-        Order cart = orderRepository.findByCustomerIdAndStatus(customer.getId(), OrderStatus.CARRINHO)
-                .orElseGet(() -> orderRepository.save(
-                        Order.builder()
-                                .customer(customer)
-                                .status(OrderStatus.CARRINHO)
-                                .totalAmount(BigDecimal.ZERO)
-                                .build()
-                ));
+        orderRepository.insertCartIfAbsent(customer.getId());
+        Order cart = orderRepository.findByCustomerIdAndStatus(customer.getId(), OrderStatus.CARRINHO).orElseThrow();
 
         return orderMapper.toResponseDto(cart);
     }
@@ -152,6 +145,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Endereço não encontrado"));
 
         applyShippingSnapshot(cart, address);
+        applyCurrentPrices(cart);
 
         // Tudo ou nada: se qualquer peça estiver esgotada, nenhuma reserva é feita.
         if (!stockService.tryReserveAll(quantityByPiece(cart), cart.getId())) {
@@ -178,8 +172,8 @@ public class OrderService {
         if (order.isAwaitingPayment()) {
             stockService.confirmAllForOrder(order.getId());
             order.markAsPaid();
-        } else if (order.getStatus() == OrderStatus.EXPIRADO) {
-            // Pagamento chegou depois da expiração: as peças já voltaram ao estoque.
+        } else if (order.getStatus() == OrderStatus.EXPIRADO || order.getStatus() == OrderStatus.CANCELADO) {
+            // Pagamento chegou depois da expiração/cancelamento (ex: Pix pendente): as peças já voltaram ao estoque.
             // Tenta reservar de novo; se alguma esgotou, o dinheiro já foi cobrado → estorno para o admin.
             if (stockService.tryReserveAll(quantityByPiece(order), order.getId())) {
                 stockService.confirmAllForOrder(order.getId());
@@ -371,6 +365,22 @@ public class OrderService {
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Item não encontrado no carrinho"));
+    }
+
+    /**
+     * O preço é copiado ao adicionar no carrinho; sem isso, um carrinho antigo compraria
+     * pelo preço de semanas atrás. Item que saiu do catálogo barra o checkout.
+     */
+    private void applyCurrentPrices(Order cart) {
+        for (OrderItem item : cart.getItems()) {
+            boolean active = item.isPieceItem() ? item.getPiece().isActive() : item.getPieceSet().isActive();
+            if (!active) {
+                throw new InvalidStateException("\"" + item.getItemName() + "\" não está mais disponível — remova do carrinho");
+            }
+            item.setUnitPrice(item.isPieceItem() ? item.getPiece().getPrice() : item.getPieceSet().getPrice());
+            item.recalculateSubtotal();
+        }
+        cart.recalculateTotal();
     }
 
     private void applyShippingSnapshot(Order order, Address address) {
