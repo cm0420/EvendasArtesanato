@@ -23,6 +23,8 @@ springdoc:
 app:
   payment:
     provider: fake
+    # só em dev: cliente escolhe o resultado (simulateOutcome) e o webhook fake é público
+    fake-open-simulation: true
   shipping:
     provider: fake
   cookie:

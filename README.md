@@ -124,7 +124,7 @@ Documentação completa no Swagger: **http://localhost:8080/swagger-ui.html**
 | `GET /api/admin/orders/{id}` | detalhe completo do pedido |
 | `GET /api/admin/reports/sales` · `best-selling-pieces` · `pending-shipment` | relatórios |
 | `/api/stock/reservations/**` · `/api/users/**` | reservas e usuários |
-| `POST /api/payments/webhook/fake` | simula o retorno assíncrono do gateway |
+| `POST /api/payments/webhook/fake` | simula o retorno assíncrono do gateway (público só em dev; nos outros profiles exige ADMIN e o pagamento fica `PENDING` até ser confirmado aqui) |
 
 </details>
 

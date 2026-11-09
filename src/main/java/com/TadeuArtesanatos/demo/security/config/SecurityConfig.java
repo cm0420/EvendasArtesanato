@@ -2,11 +2,15 @@ package com.TadeuArtesanatos.demo.security.config;
 
 import com.TadeuArtesanatos.demo.security.filter.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.SingleResultAuthorizationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,6 +20,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -31,6 +36,9 @@ public class SecurityConfig {
 
     private final UserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Value("${app.payment.fake-open-simulation:false}")
+    private boolean fakePaymentOpenSimulation;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -55,6 +63,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable()) // stateless + JWT: CSRF clássico não se aplica ao header Bearer
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Sem token em rota protegida = 401 (o padrão era 403); o front usa o 401 para tentar o refresh.
+                .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
                         // públicos
                         .requestMatchers("/auth/**").permitAll()
@@ -95,7 +105,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-approve").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/refund-deny").hasRole("ADMIN")
 
-                        // payment — webhook público, resto exige autenticação (rotas /me já cobertas por regra existente)
+                        // payment — webhook fake: público só em dev; fora de dev é o ADMIN confirmando o pagamento.
+                        // Demais webhooks (gateways reais) públicos; resto exige autenticação.
+                        .requestMatchers("/api/payments/webhook/fake").access(fakePaymentOpenSimulation
+                                ? SingleResultAuthorizationManager.permitAll()
+                                : AuthorityAuthorizationManager.hasRole("ADMIN"))
                         .requestMatchers("/api/payments/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payments/*").hasRole("ADMIN")
 

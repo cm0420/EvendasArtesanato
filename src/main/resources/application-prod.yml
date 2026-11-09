@@ -20,9 +20,9 @@ springdoc:
 
 app:
   payment:
-    provider: mercadopago
+    provider: fake  # trocar quando houver gateway real (só existe FakePaymentGateway)
   shipping:
-    provider: melhorenvio
+    provider: fake  # trocar quando houver integração real (só existe FakeShippingProvider)
 
 jwt:
   secret: ${JWT_SECRET}
