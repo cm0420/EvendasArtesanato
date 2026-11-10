@@ -2,8 +2,10 @@ package com.TadeuArtesanatos.demo.common.config;
 
 import com.TadeuArtesanatos.demo.catalog.entity.Category;
 import com.TadeuArtesanatos.demo.catalog.entity.Piece;
+import com.TadeuArtesanatos.demo.catalog.entity.PieceSet;
 import com.TadeuArtesanatos.demo.catalog.repository.CategoryRepository;
 import com.TadeuArtesanatos.demo.catalog.repository.PieceRepository;
+import com.TadeuArtesanatos.demo.catalog.repository.PieceSetRepository;
 import com.TadeuArtesanatos.demo.customer.entity.Address;
 import com.TadeuArtesanatos.demo.customer.entity.Customer;
 import com.TadeuArtesanatos.demo.customer.repository.CustomerRepository;
@@ -44,6 +46,7 @@ public class DataSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
     private final PieceRepository pieceRepository;
+    private final PieceSetRepository pieceSetRepository;
     private final CustomerRepository customerRepository;
     private final OrderRepository orderRepository;
     private final PasswordEncoder passwordEncoder;
@@ -88,6 +91,7 @@ public class DataSeeder implements CommandLineRunner {
         Category vasos = category("Vasos", "Vasos e cachepôs de cerâmica pintados à mão.");
         Category esculturas = category("Esculturas", "Peças decorativas e figuras em barro.");
         Category utilitarios = category("Utilitários", "Tigelas, canecas e travessas para o dia a dia.");
+        Category decoracao = category("Decoração", "Peças decorativas para a casa — luminárias, pratos e mais.");
 
         List<Piece> pieces = List.of(
                 piece("Vaso Vale do Jequitinhonha", "Vaso de cerâmica torneado à mão, com engobe natural e pintura de grafismos do vale.",
@@ -105,10 +109,50 @@ public class DataSeeder implements CommandLineRunner {
                 piece("Escultura Figura do Vale", "Figura modelada à mão inspirada nas bonecas de barro do Jequitinhonha.",
                         "219.00", 1, img("1520408222757-6f9f95d87d5d"), Set.of(esculturas)),
                 piece("Potiche Decorativo", "Potiche de cerâmica com tampa, pintura de grafismos em engobe.",
-                        "169.90", 2, img("1597696929644-a2157a251a43"), Set.of(esculturas, vasos))
+                        "169.90", 2, img("1597696929644-a2157a251a43"), Set.of(esculturas, vasos)),
+                piece("Vaso Espiral Engobe", "Vaso alto com relevo em espiral e engobe branco sobre barro vermelho.",
+                        "159.00", 4, img("1565193566173-7a0ee3dbe261"), Set.of(vasos)),
+                piece("Cachepô Pequeno", "Cachepô pequeno de cerâmica para suculentas e temperos.",
+                        "69.90", 10, img("1578749556568-bc2c40e68b61"), Set.of(vasos)),
+                piece("Caneca Grafismo", "Caneca de cerâmica com grafismos pintados à mão, 300 ml.",
+                        "54.90", 12, img("1493106641515-6b5631de4bb9"), Set.of(utilitarios)),
+                piece("Bowl de Cerâmica", "Bowl fundo esmaltado, ideal para sopas, caldos e açaí.",
+                        "72.00", 6, img("1610701596007-11502861dcfa"), Set.of(utilitarios)),
+                piece("Prato Decorativo Pintado", "Prato de parede com pintura central inspirada na flora do vale.",
+                        "89.90", 5, img("1584589167171-541ce45f1eea"), Set.of(decoracao)),
+                piece("Luminária de Barro", "Luminária de mesa em barro vazado, projeta grafismos na parede.",
+                        "239.00", 2, img("1606760227091-3dd870d97f1d"), Set.of(decoracao)),
+                piece("Figura Pássaro do Vale", "Pássaro modelado à mão, peça de coleção da tradição ceramista.",
+                        "139.00", 3, img("1578500494198-246f612d3b3d"), Set.of(esculturas)),
+                piece("Porta-incenso Artesanal", "Porta-incenso de cerâmica esmaltada, com canaleta para o varetão.",
+                        "44.90", 15, img("1556760544-74068565f05c"), Set.of(decoracao))
         );
         pieceRepository.saveAll(pieces);
-        log.info("Seed: {} categorias e {} peças de exemplo criadas.", 3, pieces.size());
+
+        List<PieceSet> sets = List.of(
+                pieceSet("Conjunto Café da Manhã",
+                        "Caneca, bowl e tigela combinando — o trio da mesa do café, com desconto.",
+                        "169.00", Set.of(pieces.get(10), pieces.get(11), pieces.get(3))),
+                pieceSet("Conjunto Vale Decoração",
+                        "Vaso, potiche e prato decorativo para compor um canto da casa com a cara do vale.",
+                        "399.00", Set.of(pieces.get(0), pieces.get(7), pieces.get(12))),
+                pieceSet("Conjunto Mesa Posta",
+                        "Travessa, tigela e jarra de barro para servir — mesa posta artesanal.",
+                        "299.00", Set.of(pieces.get(5), pieces.get(3), pieces.get(2)))
+        );
+        pieceSetRepository.saveAll(sets);
+
+        log.info("Seed: {} categorias, {} peças e {} conjuntos de exemplo criados.",
+                4, pieces.size(), sets.size());
+    }
+
+    private PieceSet pieceSet(String name, String description, String price, Set<Piece> pieces) {
+        return PieceSet.builder()
+                .name(name)
+                .description(description)
+                .price(new BigDecimal(price))
+                .pieces(pieces)
+                .build();
     }
 
     private Category category(String name, String description) {
@@ -166,7 +210,13 @@ public class DataSeeder implements CommandLineRunner {
         order(ana,   OrderStatus.CANCELADO, 3, null,            items(item(pick(pieces, 1), 1)));
         order(bruno, OrderStatus.PAGO,      1, null,            items(item(pick(pieces, 3), 3)));
 
-        log.info("Seed: 3 clientes e 11 pedidos de exemplo criados.");
+        // Um pedido comprando um conjunto/kit (item de PieceSet, não de peça avulsa).
+        List<PieceSet> sets = pieceSetRepository.findAll();
+        if (!sets.isEmpty()) {
+            order(carla, OrderStatus.ENTREGUE, 10, "BR423456785BR", items(kitItem(sets.get(0), 1)));
+        }
+
+        log.info("Seed: 3 clientes e pedidos de exemplo criados.");
     }
 
     private Piece pick(List<Piece> pieces, int index) {
@@ -210,6 +260,17 @@ public class DataSeeder implements CommandLineRunner {
         return OrderItem.builder()
                 .piece(piece)
                 .itemName(piece.getName())
+                .unitPrice(unit)
+                .quantity(quantity)
+                .subtotal(unit.multiply(BigDecimal.valueOf(quantity)))
+                .build();
+    }
+
+    private OrderItem kitItem(PieceSet set, int quantity) {
+        BigDecimal unit = set.getPrice();
+        return OrderItem.builder()
+                .pieceSet(set)
+                .itemName(set.getName())
                 .unitPrice(unit)
                 .quantity(quantity)
                 .subtotal(unit.multiply(BigDecimal.valueOf(quantity)))
