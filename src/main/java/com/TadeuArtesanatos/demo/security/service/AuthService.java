@@ -30,7 +30,10 @@ public class AuthService {
     private final AuthRateLimiter rateLimiter;
 
     // Por conta: barra força bruta numa senha. Por IP: barra testar uma senha comum em muitas contas
-    // (e o custo de CPU do bcrypt). A chave da conta inclui o IP para ninguém travar a conta alheia.
+    // (e o custo de CPU do bcrypt). A chave da conta é só o e-mail (sem IP): atrás do proxy do
+    // Render/Vercel o IP rotaciona a cada request e um accountKey com IP nunca acumularia. O custo é
+    // que um atacante que conheça um e-mail pode travar aquele login por até 15 min (soft, auto-expira,
+    // zera no primeiro acerto). O limite por IP é secundário/best-effort enquanto o IP não for confiável.
     static final int MAX_LOGIN_FAILURES_PER_ACCOUNT = 5;
     static final int MAX_LOGIN_FAILURES_PER_IP = 30;
     // Cadastro conta toda tentativa: impede varrer CPFs/emails pela mensagem "já cadastrado".
@@ -77,7 +80,7 @@ public class AuthService {
     @Transactional
     public AuthResult login(LoginRequestDto dto, String clientIp) {
         String ipKey = "login-ip|" + clientIp;
-        String accountKey = "login|" + clientIp + "|" + dto.email().toLowerCase();
+        String accountKey = "login|" + dto.email().toLowerCase();
         rateLimiter.checkAllowed(ipKey, MAX_LOGIN_FAILURES_PER_IP);
         rateLimiter.checkAllowed(accountKey, MAX_LOGIN_FAILURES_PER_ACCOUNT);
 
