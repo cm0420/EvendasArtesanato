@@ -23,6 +23,12 @@ app:
     provider: fake  # trocar quando houver gateway real (só existe FakePaymentGateway)
   shipping:
     provider: fake  # trocar quando houver integração real (só existe FakeShippingProvider)
+  # Seeder idempotente no startup (só prod): admin a partir das variáveis e catálogo
+  # de exemplo se estiver vazio. Ligado só aqui — não roda em dev nem nos testes.
+  seed:
+    enabled: true
+    admin-email: ${ADMIN_EMAIL:admin@jequi.com.br}
+    admin-password: ${ADMIN_PASSWORD:}
 
 jwt:
   secret: ${JWT_SECRET}

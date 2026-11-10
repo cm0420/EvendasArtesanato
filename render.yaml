@@ -36,6 +36,12 @@ services:
       # same-origin (CORS nem dispara), mas deixamos configurável. Preencher depois.
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+      # Admin semeado no startup. Defina os dois na Render (Environment) para o
+      # seeder criar o admin; sem ADMIN_PASSWORD ele não cria admin (só avisa).
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
 
 databases:
   - name: jequi-db
