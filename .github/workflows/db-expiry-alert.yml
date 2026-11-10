@@ -7,11 +7,8 @@ name: Aviso de expiração do banco (Render free)
 # Configurar (uma vez), em Settings do repositório:
 #   Variables  -> EXPIRY_DATE   = data de expiração que a Render mostra na página do banco (YYYY-MM-DD)
 #   Variables  -> WARN_DAYS     = (opcional) com quantos dias de antecedência avisar (padrão 7)
-#   Secrets    -> CALLMEBOT_PHONE  = seu número com DDI, ex: +5538999998888
-#   Secrets    -> CALLMEBOT_APIKEY = a apikey que o CallMeBot te manda no WhatsApp
-#
-# CallMeBot (grátis, 1 min): mande "I allow callmebot to send me messages" para o número
-# do CallMeBot no WhatsApp; ele responde com sua apikey. https://www.callmebot.com/blog/free-api-whatsapp-messages/
+#   Secrets    -> TELEGRAM_TOKEN   = token do bot (@BotFather)
+#   Secrets    -> TELEGRAM_CHAT_ID = seu chat id (mande uma msg pro bot e leia em getUpdates)
 
 on:
   schedule:
@@ -26,8 +23,8 @@ jobs:
         env:
           EXPIRY_DATE: ${{ vars.EXPIRY_DATE }}
           WARN_DAYS: ${{ vars.WARN_DAYS }}
-          PHONE: ${{ secrets.CALLMEBOT_PHONE }}
-          APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
 
@@ -47,8 +44,8 @@ jobs:
             exit 0
           fi
 
-          if [ -z "${PHONE:-}" ] || [ -z "${APIKEY:-}" ]; then
-            echo "::warning::Banco expira em $days_left dia(s), mas CALLMEBOT_PHONE/APIKEY não estão configurados."
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
+            echo "::warning::Banco expira em $days_left dia(s), mas TELEGRAM_TOKEN/TELEGRAM_CHAT_ID não estão configurados."
             exit 0
           fi
 
@@ -58,12 +55,11 @@ jobs:
             MSG="Jequi: o banco free da Render expira em $days_left dia(s) ($EXPIRY_DATE). Recrie/migre antes de perder os dados."
           fi
 
-          # envia pelo CallMeBot (urlencode do texto via --data-urlencode)
-          code=$(curl -s -G "https://api.callmebot.com/whatsapp.php" \
-            --data-urlencode "phone=$PHONE" \
+          # envia pelo Telegram (urlencode do texto via --data-urlencode)
+          code=$(curl -s -G "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=$TG_CHAT" \
             --data-urlencode "text=$MSG" \
-            --data-urlencode "apikey=$APIKEY" \
-            -o /tmp/callmebot.out -w "%{http_code}")
-          echo "CallMeBot HTTP $code"
-          head -c 400 /tmp/callmebot.out || true
+            -o /tmp/tg.out -w "%{http_code}")
+          echo "Telegram HTTP $code"
+          head -c 400 /tmp/tg.out || true
           [ "$code" = "200" ]
