@@ -1,0 +1,69 @@
+name: Aviso de expiração do banco (Render free)
+
+# Avisa no WhatsApp quando o banco free da Render estiver perto de expirar (~30 dias
+# desde a criação). Nada de ping/keep-alive: o app só fica lento (cold start), não perde
+# dado; o que expira por idade é o banco.
+#
+# Configurar (uma vez), em Settings do repositório:
+#   Variables  -> EXPIRY_DATE   = data de expiração que a Render mostra na página do banco (YYYY-MM-DD)
+#   Variables  -> WARN_DAYS     = (opcional) com quantos dias de antecedência avisar (padrão 7)
+#   Secrets    -> CALLMEBOT_PHONE  = seu número com DDI, ex: +5538999998888
+#   Secrets    -> CALLMEBOT_APIKEY = a apikey que o CallMeBot te manda no WhatsApp
+#
+# CallMeBot (grátis, 1 min): mande "I allow callmebot to send me messages" para o número
+# do CallMeBot no WhatsApp; ele responde com sua apikey. https://www.callmebot.com/blog/free-api-whatsapp-messages/
+
+on:
+  schedule:
+    - cron: '0 12 * * *'   # todo dia 12:00 UTC (~09:00 BRT)
+  workflow_dispatch:        # permite rodar na mão pra testar
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar dias restantes e avisar
+        env:
+          EXPIRY_DATE: ${{ vars.EXPIRY_DATE }}
+          WARN_DAYS: ${{ vars.WARN_DAYS }}
+          PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EXPIRY_DATE:-}" ]; then
+            echo "EXPIRY_DATE não configurado (Settings > Variables). Pulando."
+            exit 0
+          fi
+          WARN="${WARN_DAYS:-7}"
+
+          expiry_ts=$(date -u -d "$EXPIRY_DATE" +%s)
+          today_ts=$(date -u -d "$(date -u +%F)" +%s)
+          days_left=$(( (expiry_ts - today_ts) / 86400 ))
+          echo "Expira em $EXPIRY_DATE — faltam $days_left dia(s). Avisa quando <= $WARN."
+
+          if [ "$days_left" -gt "$WARN" ]; then
+            echo "Ainda longe. Sem aviso."
+            exit 0
+          fi
+
+          if [ -z "${PHONE:-}" ] || [ -z "${APIKEY:-}" ]; then
+            echo "::warning::Banco expira em $days_left dia(s), mas CALLMEBOT_PHONE/APIKEY não estão configurados."
+            exit 0
+          fi
+
+          if [ "$days_left" -lt 0 ]; then
+            MSG="Jequi: o banco da Render JA EXPIROU (em $EXPIRY_DATE). Recrie/migre o banco."
+          else
+            MSG="Jequi: o banco free da Render expira em $days_left dia(s) ($EXPIRY_DATE). Recrie/migre antes de perder os dados."
+          fi
+
+          # envia pelo CallMeBot (urlencode do texto via --data-urlencode)
+          code=$(curl -s -G "https://api.callmebot.com/whatsapp.php" \
+            --data-urlencode "phone=$PHONE" \
+            --data-urlencode "text=$MSG" \
+            --data-urlencode "apikey=$APIKEY" \
+            -o /tmp/callmebot.out -w "%{http_code}")
+          echo "CallMeBot HTTP $code"
+          head -c 400 /tmp/callmebot.out || true
+          [ "$code" = "200" ]
