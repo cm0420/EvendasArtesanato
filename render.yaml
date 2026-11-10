@@ -1,0 +1,44 @@
+# Blueprint da Render: backend Spring Boot (Docker) + PostgreSQL grátis.
+# Na Render: New > Blueprint > conecta este repo. Ela lê este arquivo e cria os dois.
+services:
+  - type: web
+    name: jequi-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: JWT_SECRET
+        generateValue: true          # a Render gera um segredo forte e guarda
+      - key: DB_HOST
+        fromDatabase:
+          name: jequi-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: jequi-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: jequi-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: jequi-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: jequi-db
+          property: password
+      # Domínio do front na Vercel. Com o proxy do vercel.json as chamadas são
+      # same-origin (CORS nem dispara), mas deixamos configurável. Preencher depois.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+databases:
+  - name: jequi-db
+    plan: free
+    databaseName: demo
+    user: postgres

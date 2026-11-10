@@ -29,6 +29,8 @@ jwt:
   expiration: ${JWT_EXPIRATION:3600000}
 
 server:
+  # A hospedagem (Render) injeta a porta em $PORT; cai pra SERVER_PORT/8080 fora dela.
+  port: ${PORT:${SERVER_PORT:8080}}
   # IP real do cliente a partir do X-Forwarded-For do load balancer da hospedagem
   # (o limite de login/cadastro é por IP; sem isso todo mundo teria o IP do balanceador)
   forward-headers-strategy: native
