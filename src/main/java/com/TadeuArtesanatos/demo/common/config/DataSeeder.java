@@ -4,6 +4,13 @@ import com.TadeuArtesanatos.demo.catalog.entity.Category;
 import com.TadeuArtesanatos.demo.catalog.entity.Piece;
 import com.TadeuArtesanatos.demo.catalog.repository.CategoryRepository;
 import com.TadeuArtesanatos.demo.catalog.repository.PieceRepository;
+import com.TadeuArtesanatos.demo.customer.entity.Address;
+import com.TadeuArtesanatos.demo.customer.entity.Customer;
+import com.TadeuArtesanatos.demo.customer.repository.CustomerRepository;
+import com.TadeuArtesanatos.demo.order.entity.Order;
+import com.TadeuArtesanatos.demo.order.entity.OrderItem;
+import com.TadeuArtesanatos.demo.order.entity.OrderStatus;
+import com.TadeuArtesanatos.demo.order.repository.OrderRepository;
 import com.TadeuArtesanatos.demo.user.entity.Role;
 import com.TadeuArtesanatos.demo.user.entity.User;
 import com.TadeuArtesanatos.demo.user.repository.UserRepository;
@@ -16,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -36,6 +44,8 @@ public class DataSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
     private final PieceRepository pieceRepository;
+    private final CustomerRepository customerRepository;
+    private final OrderRepository orderRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${app.seed.admin-email:admin@jequi.com.br}")
@@ -51,6 +61,7 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) {
         seedAdmin();
         seedCatalog();
+        seedOrders();
     }
 
     private void seedAdmin() {
@@ -119,5 +130,132 @@ public class DataSeeder implements CommandLineRunner {
 
     private String img(String id) {
         return IMG + id + IMG_PARAMS;
+    }
+
+    /**
+     * Pedidos de exemplo para o painel admin não nascer vazio: clientes, vendas espalhadas nos
+     * últimos ~30 dias e status variados (os gráficos usam paid_at/total_amount; os filtros usam
+     * o status; "mais vendidas" conta itens de pedidos PAGO/ENVIADO/ENTREGUE). Só roda se não
+     * houver nenhum pedido ainda — depois do primeiro boot, convive com os pedidos reais.
+     */
+    private void seedOrders() {
+        if (orderRepository.count() > 0) {
+            return;
+        }
+        List<Piece> pieces = pieceRepository.findAll();
+        if (pieces.isEmpty()) {
+            return;
+        }
+
+        Customer ana = customer("Ana", "Ribeiro", "ana.cliente@exemplo.com", "11144477735",
+                "+5533998810011", "Rua das Flores", "120", "Centro", "Araçuaí", "MG", "39600000");
+        Customer bruno = customer("Bruno", "Teixeira", "bruno.cliente@exemplo.com", "52998224725",
+                "+5531997720022", "Av. Jequitinhonha", "45", "Vale Verde", "Diamantina", "MG", "39100000");
+        Customer carla = customer("Carla", "Mendes", "carla.cliente@exemplo.com", "39053344705",
+                "+5533998630033", "Travessa do Barro", "8", "Alto", "Minas Novas", "MG", "39650000");
+
+        order(ana,   OrderStatus.ENTREGUE, 28, "BR123456785BR", items(item(pick(pieces, 0), 1), item(pick(pieces, 3), 2)));
+        order(bruno, OrderStatus.ENTREGUE, 25, "BR123456799BR", items(item(pick(pieces, 4), 1)));
+        order(carla, OrderStatus.ENVIADO,  20, "BR223456785BR", items(item(pick(pieces, 1), 2)));
+        order(ana,   OrderStatus.ENVIADO,  16, "BR223456799BR", items(item(pick(pieces, 6), 1), item(pick(pieces, 3), 1)));
+        order(bruno, OrderStatus.PAGO,     12, null,            items(item(pick(pieces, 2), 1)));
+        order(carla, OrderStatus.PAGO,      9, null,            items(item(pick(pieces, 5), 2), item(pick(pieces, 3), 1)));
+        order(ana,   OrderStatus.PAGO,      6, null,            items(item(pick(pieces, 7), 1)));
+        order(bruno, OrderStatus.ENTREGUE,  5, "BR323456785BR", items(item(pick(pieces, 0), 1)));
+        order(carla, OrderStatus.ESTORNO_SOLICITADO, 4, "BR323456799BR", items(item(pick(pieces, 4), 1)));
+        order(ana,   OrderStatus.CANCELADO, 3, null,            items(item(pick(pieces, 1), 1)));
+        order(bruno, OrderStatus.PAGO,      1, null,            items(item(pick(pieces, 3), 3)));
+
+        log.info("Seed: 3 clientes e 11 pedidos de exemplo criados.");
+    }
+
+    private Piece pick(List<Piece> pieces, int index) {
+        return pieces.get(index % pieces.size());
+    }
+
+    private Customer customer(String first, String last, String email, String cpf, String phone,
+                              String street, String number, String neighborhood, String city,
+                              String state, String zip) {
+        User user = userRepository.save(User.builder()
+                .email(email)
+                .password(passwordEncoder.encode("cliente123"))
+                .role(Role.CLIENTE)
+                .build());
+        Customer c = Customer.builder()
+                .user(user)
+                .firstName(first)
+                .lastName(last)
+                .email(email)
+                .phone(phone)
+                .cpf(cpf)
+                .build();
+        c.addAddress(Address.builder()
+                .label("Casa")
+                .recipientName(first + " " + last)
+                .recipientPhone(phone)
+                .zipCode(zip)
+                .street(street)
+                .number(number)
+                .neighborhood(neighborhood)
+                .city(city)
+                .state(state)
+                .country("BR")
+                .isDefault(true)
+                .build());
+        return customerRepository.save(c);
+    }
+
+    private OrderItem item(Piece piece, int quantity) {
+        BigDecimal unit = piece.getPrice();
+        return OrderItem.builder()
+                .piece(piece)
+                .itemName(piece.getName())
+                .unitPrice(unit)
+                .quantity(quantity)
+                .subtotal(unit.multiply(BigDecimal.valueOf(quantity)))
+                .build();
+    }
+
+    private List<OrderItem> items(OrderItem... its) {
+        return List.of(its);
+    }
+
+    private void order(Customer customer, OrderStatus status, int daysAgo, String trackingCode,
+                       List<OrderItem> orderItems) {
+        LocalDateTime when = LocalDateTime.now().minusDays(daysAgo);
+        Address addr = customer.getAddresses().get(0);
+
+        Order order = Order.builder()
+                .customer(customer)
+                .status(status)
+                .totalAmount(BigDecimal.ZERO)
+                .recipientName(addr.getRecipientName())
+                .recipientPhone(addr.getRecipientPhone())
+                .shippingZipCode(addr.getZipCode())
+                .shippingStreet(addr.getStreet())
+                .shippingNumber(addr.getNumber())
+                .shippingNeighborhood(addr.getNeighborhood())
+                .shippingCity(addr.getCity())
+                .shippingState(addr.getState())
+                .checkoutStartedAt(when)
+                .build();
+
+        orderItems.forEach(order::addItem);
+        order.applyShipping("PAC", "PAC - Correios", new BigDecimal("24.90"), 7);
+
+        // paid_at só nos pedidos de fato pagos — é a data que alimenta os gráficos de receita.
+        if (status == OrderStatus.PAGO || status == OrderStatus.ENVIADO
+                || status == OrderStatus.ENTREGUE || status == OrderStatus.ESTORNO_SOLICITADO) {
+            order.setPaidAt(when);
+        }
+        if (trackingCode != null) {
+            order.setTrackingCode(trackingCode);
+        }
+        if (status == OrderStatus.ESTORNO_SOLICITADO) {
+            order.setStatusBeforeRefund(OrderStatus.ENVIADO);
+            order.setRefundReason("Peça chegou com uma trinca.");
+            order.setRefundRequestedAt(when.plusDays(1));
+        }
+        orderRepository.save(order);
     }
 }
