@@ -1,6 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    # DB_URL_SUFFIX fica vazio por padrão (não muda nada). No Neon, setar
+    # DB_URL_SUFFIX=?sslmode=require (o Neon exige SSL).
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}${DB_URL_SUFFIX:}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   jpa:
