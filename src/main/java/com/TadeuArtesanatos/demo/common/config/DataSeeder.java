@@ -62,9 +62,19 @@ public class DataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        seedAdmin();
-        seedCatalog();
-        seedOrders();
+        // Dados de exemplo nunca podem impedir o app de subir: cada etapa é isolada.
+        // Se uma falhar, loga a causa e segue — o app bind a porta mesmo assim.
+        runStep("admin", this::seedAdmin);
+        runStep("catálogo", this::seedCatalog);
+        runStep("pedidos", this::seedOrders);
+    }
+
+    private void runStep(String label, Runnable step) {
+        try {
+            step.run();
+        } catch (Exception e) {
+            log.error("Seed '{}' falhou — app segue sem esses dados de exemplo.", label, e);
+        }
     }
 
     private void seedAdmin() {
