@@ -7,8 +7,10 @@ name: Aviso de expiração do banco (Render free)
 # Configurar (uma vez), em Settings do repositório:
 #   Variables  -> EXPIRY_DATE   = data de expiração que a Render mostra na página do banco (YYYY-MM-DD)
 #   Variables  -> WARN_DAYS     = (opcional) com quantos dias de antecedência avisar (padrão 7)
-#   Secrets    -> TELEGRAM_TOKEN   = token do bot (@BotFather)
-#   Secrets    -> TELEGRAM_CHAT_ID = seu chat id (mande uma msg pro bot e leia em getUpdates)
+#   Secrets    -> NTFY_TOPIC    = nome do tópico ntfy (funciona como senha; use um aleatório)
+#
+# ntfy (grátis, sem cadastro): instale o app "ntfy" no celular e "subscribe" no mesmo
+# tópico (ex.: jequi-db-pgm2h138shfzxlct). O alerta chega como push. https://ntfy.sh
 
 on:
   schedule:
@@ -23,8 +25,7 @@ jobs:
         env:
           EXPIRY_DATE: ${{ vars.EXPIRY_DATE }}
           WARN_DAYS: ${{ vars.WARN_DAYS }}
-          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           set -euo pipefail
 
@@ -44,22 +45,24 @@ jobs:
             exit 0
           fi
 
-          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
-            echo "::warning::Banco expira em $days_left dia(s), mas TELEGRAM_TOKEN/TELEGRAM_CHAT_ID não estão configurados."
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::Banco expira em $days_left dia(s), mas NTFY_TOPIC não está configurado."
             exit 0
           fi
 
           if [ "$days_left" -lt 0 ]; then
-            MSG="Jequi: o banco da Render JA EXPIROU (em $EXPIRY_DATE). Recrie/migre o banco."
+            MSG="O banco da Render JA EXPIROU (em $EXPIRY_DATE). Recrie/migre o banco."
           else
-            MSG="Jequi: o banco free da Render expira em $days_left dia(s) ($EXPIRY_DATE). Recrie/migre antes de perder os dados."
+            MSG="O banco free da Render expira em $days_left dia(s) ($EXPIRY_DATE). Recrie/migre antes de perder os dados."
           fi
 
-          # envia pelo Telegram (urlencode do texto via --data-urlencode)
-          code=$(curl -s -G "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=$TG_CHAT" \
-            --data-urlencode "text=$MSG" \
-            -o /tmp/tg.out -w "%{http_code}")
-          echo "Telegram HTTP $code"
-          head -c 400 /tmp/tg.out || true
+          # envia push pelo ntfy
+          code=$(curl -s "https://ntfy.sh/${NTFY_TOPIC}" \
+            -H "Title: Jequi - banco Render" \
+            -H "Priority: high" \
+            -H "Tags: warning" \
+            -d "$MSG" \
+            -o /tmp/ntfy.out -w "%{http_code}")
+          echo "ntfy HTTP $code"
+          head -c 400 /tmp/ntfy.out || true
           [ "$code" = "200" ]
